@@ -16,14 +16,14 @@ interface ToolsListProps {
 
 const ToolsList = ({ tools, onDelete, onUpdate }: ToolsListProps) => {
   const [searchTerm, setSearchTerm] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<string>("");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [editingTool, setEditingTool] = useState<Tool | null>(null);
 
   const filteredTools = tools.filter(
     (tool) =>
       (searchTerm === "" ||
         tool.name.toLowerCase().includes(searchTerm.toLowerCase())) &&
-      (categoryFilter === "" || tool.category === categoryFilter)
+      (categoryFilter === "all" || tool.category === categoryFilter)
   );
 
   const handleEdit = (tool: Tool) => {
@@ -68,7 +68,7 @@ const ToolsList = ({ tools, onDelete, onUpdate }: ToolsListProps) => {
             <SelectValue placeholder="Todas categorias" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Todas categorias</SelectItem>
+            <SelectItem value="all">Todas categorias</SelectItem>
             <SelectItem value={ToolCategory.ELECTRIC}>Elétricas</SelectItem>
             <SelectItem value={ToolCategory.MANUAL}>Manuais</SelectItem>
             <SelectItem value={ToolCategory.DIAGNOSTIC}>Diagnóstico</SelectItem>
