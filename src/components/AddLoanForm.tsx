@@ -123,7 +123,7 @@ const AddLoanForm = ({ tools, onAddLoan }: AddLoanFormProps) => {
                       </SelectItem>
                     ))
                   ) : (
-                    <SelectItem value="none" disabled>
+                    <SelectItem value="no-tools-available" disabled>
                       Não há ferramentas disponíveis
                     </SelectItem>
                   )}
