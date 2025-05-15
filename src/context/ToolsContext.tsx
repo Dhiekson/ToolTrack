@@ -14,7 +14,7 @@ interface ToolsContextType {
   returnTool: (loanId: string) => void;
 }
 
-/* Estado inicial para ferramentas
+// Estado inicial para ferramentas
 const initialTools: Tool[] = [
   {
     id: "1",
@@ -77,7 +77,7 @@ const initialLoans: Loan[] = [
     returnDate: new Date(2023, 4, 6, 16, 30),
     status: "returned",
   },
-];*/
+];
 
 export const ToolsContext = createContext<ToolsContextType | undefined>(undefined);
 
