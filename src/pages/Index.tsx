@@ -120,7 +120,7 @@ const Index = () => {
     );
     
     // Adicionar o empréstimo
-    const newLoan = {
+    const newLoan: Loan = {
       ...loan,
       id: Math.random().toString(36).substr(2, 9),
       status: "active",
@@ -138,7 +138,7 @@ const Index = () => {
     // Atualizar o empréstimo
     const updatedLoans = loans.map((l) =>
       l.id === loanId
-        ? { ...l, status: "returned", returnDate: new Date() }
+        ? { ...l, status: "returned" as const, returnDate: new Date() }
         : l
     );
 
