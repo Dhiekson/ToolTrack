@@ -25,11 +25,19 @@ import { toast } from "sonner";
 import { Tool, Loan } from "@/types/types";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon } from "lucide-react";
+import { CalendarIcon, Search, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, set } from "date-fns";
 import { Switch } from "@/components/ui/switch";
 import { addHours } from "date-fns";
+import { 
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList
+} from "@/components/ui/command";
 
 interface AddLoanFormProps {
   tools: Tool[];
@@ -70,6 +78,8 @@ const formSchema = z.object({
 
 const AddLoanForm = ({ tools, onAddLoan }: AddLoanFormProps) => {
   const availableTools = tools.filter((tool) => tool.available > 0);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [openToolSelector, setOpenToolSelector] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -84,6 +94,10 @@ const AddLoanForm = ({ tools, onAddLoan }: AddLoanFormProps) => {
   const isThirdParty = form.watch("isThirdParty");
   const selectedToolId = form.watch("toolId");
   const borrowDate = form.watch("borrowDate");
+
+  const filteredTools = availableTools.filter(tool => 
+    tool.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const onSubmit = (values: z.infer<typeof formSchema>) => {
     // Encontrar o nome da ferramenta selecionada
@@ -120,6 +134,7 @@ const AddLoanForm = ({ tools, onAddLoan }: AddLoanFormProps) => {
 
     toast.success("Empréstimo registrado com sucesso");
     form.reset();
+    setSearchQuery("");
   };
 
   return (
@@ -129,28 +144,82 @@ const AddLoanForm = ({ tools, onAddLoan }: AddLoanFormProps) => {
           control={form.control}
           name="toolId"
           render={({ field }) => (
-            <FormItem>
+            <FormItem className="flex flex-col">
               <FormLabel>Ferramenta</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione uma ferramenta" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {availableTools.length > 0 ? (
-                    availableTools.map((tool) => (
-                      <SelectItem key={tool.id} value={tool.id}>
-                        {tool.name} ({tool.available} disponíveis)
-                      </SelectItem>
-                    ))
-                  ) : (
-                    <SelectItem value="no-tools-available" disabled>
-                      Não há ferramentas disponíveis
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
+              <Popover open={openToolSelector} onOpenChange={setOpenToolSelector}>
+                <PopoverTrigger asChild>
+                  <FormControl>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={openToolSelector}
+                      className={cn(
+                        "w-full justify-between",
+                        !field.value && "text-muted-foreground"
+                      )}
+                    >
+                      {field.value
+                        ? tools.find((tool) => tool.id === field.value)?.name
+                        : "Selecione uma ferramenta"}
+                      <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </FormControl>
+                </PopoverTrigger>
+                <PopoverContent className="w-full p-0">
+                  <Command>
+                    <CommandInput
+                      placeholder="Buscar ferramenta..."
+                      value={searchQuery}
+                      onValueChange={setSearchQuery}
+                      className="h-9"
+                    />
+                    <CommandList>
+                      <CommandEmpty>
+                        <div className="flex items-center justify-center p-4 text-sm text-muted-foreground">
+                          <AlertTriangle className="mr-2 h-4 w-4" />
+                          Nenhuma ferramenta encontrada
+                        </div>
+                      </CommandEmpty>
+                      <CommandGroup>
+                        {filteredTools.length > 0 ? (
+                          filteredTools.map((tool) => (
+                            <CommandItem
+                              key={tool.id}
+                              value={tool.id}
+                              onSelect={() => {
+                                form.setValue("toolId", tool.id);
+                                setOpenToolSelector(false);
+                              }}
+                            >
+                              {tool.name}
+                              <span className="ml-2 text-xs text-muted-foreground">
+                                ({tool.available} disponíveis)
+                              </span>
+                            </CommandItem>
+                          ))
+                        ) : (
+                          tools
+                            .filter(tool => tool.available === 0)
+                            .filter(tool => tool.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                            .map((tool) => (
+                              <CommandItem
+                                key={tool.id}
+                                value={tool.id}
+                                disabled
+                                className="opacity-50"
+                              >
+                                {tool.name}
+                                <span className="ml-2 text-xs text-destructive font-medium">
+                                  (Indisponível)
+                                </span>
+                              </CommandItem>
+                            ))
+                        )}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
               <FormMessage />
             </FormItem>
           )}
