@@ -1,15 +1,16 @@
-
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
 import Dashboard from "@/components/Dashboard";
-import ToolsList from "@/components/ToolsList";
 import LoansList from "@/components/LoansList";
-import AddToolForm from "@/components/AddToolForm";
 import AddLoanForm from "@/components/AddLoanForm";
 import { Tool, Loan, ToolCategory } from "@/types/types";
 
 const Index = () => {
+  const navigate = useNavigate();
+  
   // Estado inicial para ferramentas
   const [tools, setTools] = useState<Tool[]>([
     {
@@ -123,7 +124,7 @@ const Index = () => {
     const newLoan: Loan = {
       ...loan,
       id: Math.random().toString(36).substr(2, 9),
-      status: "active",
+      status: "active" as const,
     };
     
     setTools(updatedTools);
@@ -153,35 +154,26 @@ const Index = () => {
 
   return (
     <div className="container mx-auto py-10">
-      <h1 className="text-3xl font-bold text-primary mb-8 text-center">
-        Sistema de Gerenciamento de Ferramentas
-      </h1>
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-bold text-primary">
+          Sistema de Gerenciamento de Ferramentas
+        </h1>
+        <div className="space-x-4">
+          <Button onClick={() => navigate('/ferramentas')}>
+            Gerenciar Ferramentas
+          </Button>
+        </div>
+      </div>
 
       <Tabs defaultValue="dashboard" className="w-full">
-        <TabsList className="grid grid-cols-5 mb-8">
+        <TabsList className="grid grid-cols-3 mb-8">
           <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-          <TabsTrigger value="tools">Ferramentas</TabsTrigger>
           <TabsTrigger value="loans">Empréstimos</TabsTrigger>
-          <TabsTrigger value="addTool">Nova Ferramenta</TabsTrigger>
           <TabsTrigger value="addLoan">Novo Empréstimo</TabsTrigger>
         </TabsList>
 
         <TabsContent value="dashboard">
           <Dashboard tools={tools} loans={loans} />
-        </TabsContent>
-
-        <TabsContent value="tools">
-          <Card>
-            <CardHeader>
-              <CardTitle>Inventário de Ferramentas</CardTitle>
-              <CardDescription>
-                Gerencie todas as ferramentas disponíveis no sistema.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ToolsList tools={tools} onDelete={deleteTool} onUpdate={updateTool} />
-            </CardContent>
-          </Card>
         </TabsContent>
 
         <TabsContent value="loans">
@@ -194,20 +186,6 @@ const Index = () => {
             </CardHeader>
             <CardContent>
               <LoansList loans={loans} onReturn={returnTool} />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="addTool">
-          <Card>
-            <CardHeader>
-              <CardTitle>Adicionar Nova Ferramenta</CardTitle>
-              <CardDescription>
-                Cadastre uma nova ferramenta no sistema.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <AddToolForm onAddTool={addTool} />
             </CardContent>
           </Card>
         </TabsContent>
