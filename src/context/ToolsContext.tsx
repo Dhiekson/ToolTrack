@@ -145,7 +145,7 @@ export function ToolsProvider({ children }: { children: ReactNode }) {
     const loan = loans.find((l) => l.id === loanId);
     if (!loan || loan.status !== "active") return;
 
-    // Atualizar o empréstimo
+    // Atualizar o empréstimo com a data e hora atual de devolução
     const updatedLoans = loans.map((l) =>
       l.id === loanId
         ? { ...l, status: "returned" as const, returnDate: new Date() }

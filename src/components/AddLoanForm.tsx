@@ -23,10 +23,9 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Tool, Loan } from "@/types/types";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon, Clock } from "lucide-react";
+import { CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, set } from "date-fns";
 import { Switch } from "@/components/ui/switch";
@@ -36,14 +35,6 @@ interface AddLoanFormProps {
   tools: Tool[];
   onAddLoan: (loan: Omit<Loan, "id" | "status">) => void;
 }
-
-const timeOptions = Array.from({ length: 24 }, (_, i) => {
-  const hour = i.toString().padStart(2, "0");
-  return [
-    { label: `${hour}:00`, value: `${hour}:00` },
-    { label: `${hour}:30`, value: `${hour}:30` }
-  ];
-}).flat();
 
 const formSchema = z.object({
   toolId: z.string({
@@ -62,9 +53,7 @@ const formSchema = z.object({
   borrowDate: z.date({
     required_error: "Selecione a data de saída.",
   }),
-  borrowTime: z.string().default("08:00"),
   expectedReturnDate: z.date().optional(),
-  expectedReturnTime: z.string().default("17:00")
 }).refine(
   (data) => !(!data.isThirdParty && !data.role),
   {
@@ -87,9 +76,7 @@ const AddLoanForm = ({ tools, onAddLoan }: AddLoanFormProps) => {
     defaultValues: {
       isThirdParty: false,
       borrowDate: new Date(),
-      borrowTime: format(new Date(), "HH:mm"),
       expectedReturnDate: undefined,
-      expectedReturnTime: "17:00",
     },
   });
 
@@ -98,26 +85,23 @@ const AddLoanForm = ({ tools, onAddLoan }: AddLoanFormProps) => {
   const selectedToolId = form.watch("toolId");
   const borrowDate = form.watch("borrowDate");
 
-  const applyTimeToDate = (date: Date | undefined, timeString: string): Date | null => {
-    if (!date) return null;
-    
-    const [hours, minutes] = timeString.split(":").map(Number);
-    return set(new Date(date), { hours, minutes, seconds: 0, milliseconds: 0 });
-  };
-
   const onSubmit = (values: z.infer<typeof formSchema>) => {
     // Encontrar o nome da ferramenta selecionada
     const selectedTool = tools.find((tool) => tool.id === values.toolId);
     if (!selectedTool) return;
 
-    // Aplicar horário à data de saída
-    const borrowDateWithTime = applyTimeToDate(values.borrowDate, values.borrowTime);
-    if (!borrowDateWithTime) return;
+    // Usar a data e hora atual para o empréstimo
+    const borrowDateWithTime = new Date();
 
-    // Aplicar horário à data prevista de devolução (apenas para terceiros)
+    // Para terceiros, usar a data prevista de devolução com a hora atual
     let expectedReturnDateWithTime: Date | null = null;
     if (values.isThirdParty && values.expectedReturnDate) {
-      expectedReturnDateWithTime = applyTimeToDate(values.expectedReturnDate, values.expectedReturnTime);
+      const now = new Date();
+      expectedReturnDateWithTime = set(new Date(values.expectedReturnDate), {
+        hours: now.getHours(),
+        minutes: now.getMinutes(),
+        seconds: now.getSeconds(),
+      });
     } else {
       // Para funcionários, não definimos data de devolução prevista
       expectedReturnDateWithTime = null;
@@ -243,144 +227,94 @@ const AddLoanForm = ({ tools, onAddLoan }: AddLoanFormProps) => {
           />
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <FormField
-              control={form.control}
-              name="borrowDate"
-              render={({ field }) => (
-                <FormItem className="flex flex-col">
-                  <FormLabel>Data de Saída</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant={"outline"}
-                          className={cn(
-                            "w-full pl-3 text-left font-normal",
-                            !field.value && "text-muted-foreground"
-                          )}
-                        >
-                          {field.value ? (
-                            format(field.value, "dd/MM/yyyy")
-                          ) : (
-                            <span>Selecione uma data</span>
-                          )}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={field.value}
-                        onSelect={field.onChange}
-                        initialFocus
-                        className={cn("p-3 pointer-events-auto")}
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="borrowTime"
-              render={({ field }) => (
-                <FormItem className="mt-2">
-                  <FormLabel>Horário de Saída</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {timeOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-
-          {isThirdParty && (
-            <div>
-              <FormField
-                control={form.control}
-                name="expectedReturnDate"
-                render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>Data Prevista de Devolução</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant={"outline"}
-                            className={cn(
-                              "w-full pl-3 text-left font-normal",
-                              !field.value && "text-muted-foreground"
-                            )}
-                          >
-                            {field.value ? (
-                              format(field.value, "dd/MM/yyyy")
-                            ) : (
-                              <span>Selecione uma data</span>
-                            )}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={field.onChange}
-                          disabled={(date) => date < borrowDate}
-                          initialFocus
-                          className={cn("p-3 pointer-events-auto")}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="expectedReturnTime"
-                render={({ field }) => (
-                  <FormItem className="mt-2">
-                    <FormLabel>Horário Previsto de Devolução</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {timeOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+        <FormField
+          control={form.control}
+          name="borrowDate"
+          render={({ field }) => (
+            <FormItem className="flex flex-col">
+              <FormLabel>Data de Saída</FormLabel>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <FormControl>
+                    <Button
+                      variant={"outline"}
+                      className={cn(
+                        "w-full pl-3 text-left font-normal",
+                        !field.value && "text-muted-foreground"
+                      )}
+                    >
+                      {field.value ? (
+                        format(field.value, "dd/MM/yyyy")
+                      ) : (
+                        <span>Selecione uma data</span>
+                      )}
+                      <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                    </Button>
+                  </FormControl>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={field.value}
+                    onSelect={field.onChange}
+                    initialFocus
+                    className={cn("p-3 pointer-events-auto")}
+                  />
+                </PopoverContent>
+              </Popover>
+              <FormDescription>
+                O horário de saída será registrado automaticamente no momento do empréstimo.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
           )}
-        </div>
+        />
+
+        {isThirdParty && (
+          <FormField
+            control={form.control}
+            name="expectedReturnDate"
+            render={({ field }) => (
+              <FormItem className="flex flex-col">
+                <FormLabel>Data Prevista de Devolução</FormLabel>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <FormControl>
+                      <Button
+                        variant={"outline"}
+                        className={cn(
+                          "w-full pl-3 text-left font-normal",
+                          !field.value && "text-muted-foreground"
+                        )}
+                      >
+                        {field.value ? (
+                          format(field.value, "dd/MM/yyyy")
+                        ) : (
+                          <span>Selecione uma data</span>
+                        )}
+                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                      </Button>
+                    </FormControl>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={field.value}
+                      onSelect={field.onChange}
+                      disabled={(date) => date < borrowDate}
+                      initialFocus
+                      className={cn("p-3 pointer-events-auto")}
+                    />
+                  </PopoverContent>
+                </Popover>
+                <FormDescription>
+                  O horário previsto de devolução será o mesmo da criação do registro.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
 
         <Button type="submit" className="w-full">
           Registrar Empréstimo

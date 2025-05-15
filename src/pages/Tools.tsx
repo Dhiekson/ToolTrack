@@ -15,6 +15,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { useTools } from "@/context/ToolsContext";
+import { Tool } from "@/types/types";
 
 const Tools = () => {
   const { toast } = useToast();
@@ -29,7 +30,7 @@ const Tools = () => {
     });
   };
 
-  const handleUpdateTool = (updatedTool) => {
+  const handleUpdateTool = (updatedTool: Tool) => {
     updateTool(updatedTool);
     toast({
       title: "Ferramenta atualizada",
