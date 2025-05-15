@@ -15,6 +15,7 @@ const Dashboard = ({ tools, loans }: DashboardProps) => {
   const overdueLoans = loans.filter(
     (loan) => 
       loan.status === "active" && 
+      loan.isThirdParty && 
       loan.expectedReturnDate < new Date()
   ).length;
 
@@ -101,16 +102,22 @@ const Dashboard = ({ tools, loans }: DashboardProps) => {
                             </span>
                           )}
                         </td>
-                        <td className="px-4 py-3">{formatDate(loan.borrowDate)}</td>
+                        <td className="px-4 py-3">{formatDate(loan.borrowDate, true)}</td>
                         <td className="px-4 py-3">
                           <span
                             className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
                               loan.status === "active"
-                                ? "bg-blue-100 text-blue-800"
+                                ? loan.isThirdParty && loan.expectedReturnDate < new Date()
+                                  ? "bg-red-100 text-red-800"
+                                  : "bg-blue-100 text-blue-800"
                                 : "bg-green-100 text-green-800"
                             }`}
                           >
-                            {loan.status === "active" ? "Em uso" : "Devolvido"}
+                            {loan.status === "active" 
+                              ? loan.isThirdParty && loan.expectedReturnDate < new Date()
+                                ? "Atrasado" 
+                                : "Em uso" 
+                              : "Devolvido"}
                           </span>
                         </td>
                       </tr>

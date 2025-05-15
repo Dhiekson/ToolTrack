@@ -26,6 +26,7 @@ const LoansList = ({ loans, onReturn }: LoansListProps) => {
   const isOverdue = (loan: Loan) => {
     return (
       loan.status === "active" &&
+      loan.isThirdParty &&
       loan.expectedReturnDate < new Date()
     );
   };
@@ -86,10 +87,12 @@ const LoansList = ({ loans, onReturn }: LoansListProps) => {
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3">{formatDate(loan.borrowDate)}</td>
-                  <td className="px-4 py-3">{formatDate(loan.expectedReturnDate)}</td>
+                  <td className="px-4 py-3">{formatDate(loan.borrowDate, true)}</td>
                   <td className="px-4 py-3">
-                    {loan.returnDate ? formatDate(loan.returnDate) : "-"}
+                    {loan.isThirdParty ? formatDate(loan.expectedReturnDate, true) : "-"}
+                  </td>
+                  <td className="px-4 py-3">
+                    {loan.returnDate ? formatDate(loan.returnDate, true) : "-"}
                   </td>
                   <td className="px-4 py-3">
                     <span
