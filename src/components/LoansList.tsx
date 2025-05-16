@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Loan, Employee } from "@/types/types";
 import { Button } from "@/components/ui/button";
@@ -27,6 +26,9 @@ interface LoansListProps {
 declare module "jspdf" {
   interface jsPDF {
     autoTable: (options: any) => jsPDF;
+    lastAutoTable: {
+      finalY: number;
+    };
   }
 }
 
@@ -160,6 +162,14 @@ const LoansList = ({ loans, employees, onReturn }: LoansListProps) => {
     doc.save("relatorio-emprestimos.pdf");
   };
 
+  // Handle date range changes safely
+  const handleDateRangeChange = (range: any) => {
+    setDateRange({
+      from: range?.from,
+      to: range?.to
+    });
+  };
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
@@ -273,10 +283,10 @@ const LoansList = ({ loans, employees, onReturn }: LoansListProps) => {
               <CalendarComponent
                 mode="range"
                 selected={{ 
-                  from: dateRange.from || new Date(), 
-                  to: dateRange.to || new Date() 
+                  from: dateRange.from || undefined, 
+                  to: dateRange.to || undefined
                 }}
-                onSelect={setDateRange}
+                onSelect={handleDateRangeChange}
                 numberOfMonths={2}
                 initialFocus
               />

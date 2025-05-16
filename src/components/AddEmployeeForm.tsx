@@ -50,7 +50,11 @@ const AddEmployeeForm = ({ onAddEmployee }: AddEmployeeFormProps) => {
   });
 
   const onSubmit = (values: z.infer<typeof formSchema>) => {
-    onAddEmployee(values);
+    // Make sure to provide all required fields from the Employee type
+    onAddEmployee({
+      name: values.name,
+      role: values.role,
+    });
     form.reset();
   };
 
