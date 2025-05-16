@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -20,7 +19,19 @@ import {
 } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { jsPDF } from "jspdf";
+import { format } from "date-fns";
+// Need to include jspdf-autotable as a side effect to add autoTable method to jsPDF
 import "jspdf-autotable";
+
+// Extend jsPDF type to include autoTable method
+declare module 'jspdf' {
+  interface jsPDF {
+    autoTable: (options: any) => any;
+    lastAutoTable: {
+      finalY: number;
+    };
+  }
+}
 
 const Reports = () => {
   const navigate = useNavigate();
