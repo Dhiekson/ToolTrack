@@ -1,35 +1,25 @@
+
 import { useState } from "react";
 import { Loan, Employee } from "@/types/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatDate } from "@/lib/utils";
-import { Download, Search, Calendar, User } from "lucide-react";
+import { Search, Calendar, User } from "lucide-react";
 import { 
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
-import { format, isWithinInterval, startOfDay, endOfDay, parseISO } from "date-fns";
+import { format, isWithinInterval, startOfDay, endOfDay } from "date-fns";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
-import { jsPDF } from "jspdf";
-import "jspdf-autotable";
 
 interface LoansListProps {
   loans: Loan[];
   employees: Employee[];
   onReturn: (id: string) => void;
-}
-
-declare module "jspdf" {
-  interface jsPDF {
-    autoTable: (options: any) => jsPDF;
-    lastAutoTable: {
-      finalY: number;
-    };
-  }
 }
 
 const LoansList = ({ loans, employees, onReturn }: LoansListProps) => {
@@ -90,76 +80,6 @@ const LoansList = ({ loans, employees, onReturn }: LoansListProps) => {
     setStatusFilter("all");
     setEmployeeFilter(null);
     setDateRange({ from: undefined, to: undefined });
-  };
-
-  const generatePDF = () => {
-    // Create a new PDF document
-    const doc = new jsPDF();
-    
-    // Add title
-    doc.setFontSize(16);
-    doc.text("Relatório de Empréstimos de Ferramentas", 14, 15);
-    
-    // Add filters applied
-    doc.setFontSize(10);
-    let yPos = 25;
-    
-    doc.text(`Data de geração: ${format(new Date(), "dd/MM/yyyy HH:mm")}`, 14, yPos);
-    yPos += 5;
-    
-    if (statusFilter !== "all") {
-      doc.text(`Status: ${statusFilter === "active" ? "Em uso" : "Devolvidos"}`, 14, yPos);
-      yPos += 5;
-    }
-    
-    if (employeeFilter) {
-      const employee = employees.find(e => e.id === employeeFilter);
-      if (employee) {
-        doc.text(`Funcionário: ${employee.name}`, 14, yPos);
-        yPos += 5;
-      }
-    }
-    
-    if (dateRange.from && dateRange.to) {
-      doc.text(`Período: ${format(dateRange.from, "dd/MM/yyyy")} a ${format(dateRange.to, "dd/MM/yyyy")}`, 14, yPos);
-      yPos += 5;
-    }
-    
-    // Add table data
-    const tableData = filteredLoans.map(loan => [
-      loan.toolName,
-      loan.borrower,
-      loan.isThirdParty ? "Terceiro" : loan.role,
-      formatDate(loan.borrowDate, false),
-      loan.expectedReturnDate ? formatDate(loan.expectedReturnDate, false) : "-",
-      loan.returnDate ? formatDate(loan.returnDate, false) : "-",
-      loan.status === "active" ? (isOverdue(loan) ? "Atrasado" : "Em uso") : "Devolvido"
-    ]);
-    
-    // Generate the table
-    doc.autoTable({
-      startY: yPos + 5,
-      head: [["Ferramenta", "Responsável", "Função", "Saída", "Devolução Prevista", "Devolução Real", "Status"]],
-      body: tableData,
-      theme: "striped",
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [66, 139, 202] },
-      margin: { top: 30 }
-    });
-    
-    // Add signature area for employees
-    if (employeeFilter) {
-      const employee = employees.find(e => e.id === employeeFilter);
-      if (employee) {
-        const lastY = (doc as any).lastAutoTable.finalY || 150;
-        doc.line(14, lastY + 30, 90, lastY + 30);
-        doc.text(`Assinatura de ${employee.name}`, 14, lastY + 35);
-        doc.text("Data: ___/___/______", 14, lastY + 45);
-      }
-    }
-    
-    // Save the PDF
-    doc.save("relatorio-emprestimos.pdf");
   };
 
   // Handle date range changes safely
@@ -313,11 +233,6 @@ const LoansList = ({ loans, employees, onReturn }: LoansListProps) => {
       <div className="flex justify-between items-center">
         <Button variant="outline" onClick={handleClearFilters}>
           Limpar filtros
-        </Button>
-        
-        <Button onClick={generatePDF}>
-          <Download className="mr-2 h-4 w-4" />
-          Gerar Relatório PDF
         </Button>
       </div>
 

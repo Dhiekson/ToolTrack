@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, CalendarDays, FileText } from "lucide-react";
+import { ArrowLeft, CalendarDays, FileText, Download } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { Tabs, TabsList, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { DateRange } from "react-day-picker";
@@ -19,10 +19,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { jsPDF } from "jspdf";
+import "jspdf-autotable";
 
 const Reports = () => {
   const navigate = useNavigate();
-  const { loans } = useTools();
+  const { loans, employees } = useTools();
   const [date, setDate] = useState<DateRange | undefined>({
     from: new Date(new Date().setMonth(new Date().getMonth() - 1)),
     to: new Date(),
@@ -44,6 +46,60 @@ const Reports = () => {
     
     return isWithinDateRange;
   });
+
+  // Função para gerar PDF de relatórios
+  const generatePDF = () => {
+    // Create a new PDF document
+    const doc = new jsPDF();
+    
+    // Add title
+    doc.setFontSize(16);
+    doc.text("Relatório de Empréstimos de Ferramentas", 14, 15);
+    
+    // Add filters applied
+    doc.setFontSize(10);
+    let yPos = 25;
+    
+    doc.text(`Data de geração: ${format(new Date(), "dd/MM/yyyy HH:mm")}`, 14, yPos);
+    yPos += 5;
+    
+    if (reportType !== "all") {
+      doc.text(`Status: ${reportType === "active" ? "Em uso" : "Devolvidos"}`, 14, yPos);
+      yPos += 5;
+    }
+    
+    if (date?.from && date?.to) {
+      doc.text(`Período: ${format(date.from, "dd/MM/yyyy")} a ${format(date.to, "dd/MM/yyyy")}`, 14, yPos);
+      yPos += 5;
+    }
+    
+    // Add table data
+    const tableData = filteredLoans.map(loan => [
+      loan.toolName,
+      loan.borrower,
+      loan.isThirdParty ? "Terceiro" : loan.role,
+      formatDate(loan.borrowDate, false),
+      loan.expectedReturnDate ? formatDate(loan.expectedReturnDate, false) : "-",
+      loan.returnDate ? formatDate(loan.returnDate, false) : "-",
+      loan.status === "active" ? 
+        (loan.isThirdParty && loan.expectedReturnDate && loan.expectedReturnDate < new Date() ? "Atrasado" : "Em uso") 
+        : "Devolvido"
+    ]);
+    
+    // Generate the table
+    doc.autoTable({
+      startY: yPos + 5,
+      head: [["Ferramenta", "Responsável", "Função", "Saída", "Devolução Prevista", "Devolução Real", "Status"]],
+      body: tableData,
+      theme: "striped",
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [66, 139, 202] },
+      margin: { top: 30 }
+    });
+    
+    // Save the PDF
+    doc.save("relatorio-emprestimos.pdf");
+  };
 
   return (
     <div className="container mx-auto py-10">
@@ -100,6 +156,13 @@ const Reports = () => {
         </CardContent>
       </Card>
 
+      <div className="flex justify-end mb-6">
+        <Button onClick={generatePDF}>
+          <Download className="mr-2 h-4 w-4" />
+          Gerar Relatório PDF
+        </Button>
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -145,7 +208,7 @@ const Reports = () => {
                       </TableCell>
                       <TableCell>{formatDate(loan.borrowDate, true)}</TableCell>
                       <TableCell>
-                        {loan.isThirdParty ? formatDate(loan.expectedReturnDate, true) : "-"}
+                        {loan.isThirdParty && loan.expectedReturnDate ? formatDate(loan.expectedReturnDate, true) : "-"}
                       </TableCell>
                       <TableCell>
                         {loan.returnDate ? formatDate(loan.returnDate, true) : "-"}
@@ -154,14 +217,14 @@ const Reports = () => {
                         <span
                           className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
                             loan.status === "active"
-                              ? loan.isThirdParty && loan.expectedReturnDate < new Date()
+                              ? loan.isThirdParty && loan.expectedReturnDate && loan.expectedReturnDate < new Date()
                                 ? "bg-red-100 text-red-800"
                                 : "bg-blue-100 text-blue-800"
                               : "bg-green-100 text-green-800"
                           }`}
                         >
                           {loan.status === "active"
-                            ? loan.isThirdParty && loan.expectedReturnDate < new Date()
+                            ? loan.isThirdParty && loan.expectedReturnDate && loan.expectedReturnDate < new Date()
                               ? "Atrasado"
                               : "Em uso"
                             : "Devolvido"}
