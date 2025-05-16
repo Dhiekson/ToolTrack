@@ -1,8 +1,9 @@
+
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, CalendarDays, FileText, Download } from "lucide-react";
+import { ArrowLeft, CalendarDays, FileText, Download, Search, User } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { Tabs, TabsList, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { DateRange } from "react-day-picker";
@@ -20,6 +21,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { jsPDF } from "jspdf";
 import { format } from "date-fns";
+import { Input } from "@/components/ui/input";
 // Need to include jspdf-autotable as a side effect to add autoTable method to jsPDF
 import "jspdf-autotable";
 
@@ -41,8 +43,9 @@ const Reports = () => {
     to: new Date(),
   });
   const [reportType, setReportType] = useState<string>("all");
+  const [employeeFilter, setEmployeeFilter] = useState<string>("");
 
-  // Filtrar empréstimos com base na data e tipo
+  // Filtrar empréstimos com base na data, tipo e funcionário
   const filteredLoans = loans.filter(loan => {
     if (!date?.from || !date?.to) return true;
     
@@ -50,83 +53,126 @@ const Reports = () => {
     if (!loanDate) return false;
     
     const isWithinDateRange = loanDate >= date.from && loanDate <= date.to;
+    const matchesEmployee = employeeFilter === "" || 
+      loan.borrower.toLowerCase().includes(employeeFilter.toLowerCase());
     
-    if (reportType === "all") return isWithinDateRange;
-    if (reportType === "active") return isWithinDateRange && loan.status === "active";
-    if (reportType === "returned") return isWithinDateRange && loan.status === "returned";
+    if (reportType === "all") return isWithinDateRange && matchesEmployee;
+    if (reportType === "active") return isWithinDateRange && loan.status === "active" && matchesEmployee;
+    if (reportType === "returned") return isWithinDateRange && loan.status === "returned" && matchesEmployee;
     
-    return isWithinDateRange;
+    return isWithinDateRange && matchesEmployee;
   });
 
   // Função para gerar PDF de relatórios
   const generatePDF = () => {
-    // Create a new PDF document
-    const doc = new jsPDF();
-    
-    // Add title
-    doc.setFontSize(16);
-    doc.text("Relatório de Empréstimos de Ferramentas", 14, 15);
-    
-    // Add filters applied
-    doc.setFontSize(10);
-    let yPos = 25;
-    
-    doc.text(`Data de geração: ${format(new Date(), "dd/MM/yyyy HH:mm")}`, 14, yPos);
-    yPos += 5;
-    
-    if (reportType !== "all") {
-      doc.text(`Status: ${reportType === "active" ? "Em uso" : "Devolvidos"}`, 14, yPos);
+    try {
+      // Create a new PDF document
+      const doc = new jsPDF();
+      
+      // Add title
+      doc.setFontSize(16);
+      doc.text("Relatório de Empréstimos de Ferramentas", 14, 15);
+      
+      // Add filters applied
+      doc.setFontSize(10);
+      let yPos = 25;
+      
+      doc.text(`Data de geração: ${format(new Date(), "dd/MM/yyyy HH:mm")}`, 14, yPos);
       yPos += 5;
+      
+      if (reportType !== "all") {
+        doc.text(`Status: ${reportType === "active" ? "Em uso" : "Devolvidos"}`, 14, yPos);
+        yPos += 5;
+      }
+      
+      if (employeeFilter !== "") {
+        doc.text(`Funcionário: ${employeeFilter}`, 14, yPos);
+        yPos += 5;
+      }
+      
+      if (date?.from && date?.to) {
+        doc.text(`Período: ${format(date.from, "dd/MM/yyyy")} a ${format(date.to, "dd/MM/yyyy")}`, 14, yPos);
+        yPos += 5;
+      }
+      
+      // Add table data
+      const tableData = filteredLoans.map(loan => [
+        loan.toolName,
+        loan.borrower,
+        loan.isThirdParty ? "Terceiro" : loan.role,
+        formatDate(loan.borrowDate, false),
+        loan.expectedReturnDate ? formatDate(loan.expectedReturnDate, false) : "-",
+        loan.returnDate ? formatDate(loan.returnDate, false) : "-",
+        loan.status === "active" ? 
+          (loan.isThirdParty && loan.expectedReturnDate && loan.expectedReturnDate < new Date() ? "Atrasado" : "Em uso") 
+          : "Devolvido"
+      ]);
+      
+      // Generate the table
+      doc.autoTable({
+        startY: yPos + 5,
+        head: [["Ferramenta", "Responsável", "Função", "Saída", "Devolução Prevista", "Devolução Real", "Status"]],
+        body: tableData,
+        theme: "striped",
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [66, 139, 202] },
+        margin: { top: 30 }
+      });
+      
+      // Save the PDF
+      doc.save("relatorio-emprestimos.pdf");
+    } catch (error) {
+      console.error("Erro ao gerar PDF:", error);
     }
-    
-    if (date?.from && date?.to) {
-      doc.text(`Período: ${format(date.from, "dd/MM/yyyy")} a ${format(date.to, "dd/MM/yyyy")}`, 14, yPos);
-      yPos += 5;
-    }
-    
-    // Add table data
-    const tableData = filteredLoans.map(loan => [
-      loan.toolName,
-      loan.borrower,
-      loan.isThirdParty ? "Terceiro" : loan.role,
-      formatDate(loan.borrowDate, false),
-      loan.expectedReturnDate ? formatDate(loan.expectedReturnDate, false) : "-",
-      loan.returnDate ? formatDate(loan.returnDate, false) : "-",
-      loan.status === "active" ? 
-        (loan.isThirdParty && loan.expectedReturnDate && loan.expectedReturnDate < new Date() ? "Atrasado" : "Em uso") 
-        : "Devolvido"
-    ]);
-    
-    // Generate the table
-    doc.autoTable({
-      startY: yPos + 5,
-      head: [["Ferramenta", "Responsável", "Função", "Saída", "Devolução Prevista", "Devolução Real", "Status"]],
-      body: tableData,
-      theme: "striped",
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [66, 139, 202] },
-      margin: { top: 30 }
-    });
-    
-    // Save the PDF
-    doc.save("relatorio-emprestimos.pdf");
   };
+
+  // Obter nomes únicos dos funcionários para o filtro
+  const uniqueBorrowers = Array.from(new Set(loans.map(loan => loan.borrower)));
 
   return (
     <div className="container mx-auto py-10">
-      <div className="flex items-center mb-6">
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={() => navigate('/')}
-          className="mr-4"
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Voltar
-        </Button>
-        <h1 className="text-3xl font-bold text-primary">
-          Relatórios de Empréstimos
-        </h1>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+        <div className="flex items-center">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => navigate('/')}
+            className="mr-4"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Voltar
+          </Button>
+          <h1 className="text-3xl font-bold text-primary">
+            Relatórios de Empréstimos
+          </h1>
+        </div>
+        
+        <div className="flex flex-wrap gap-2">
+          <Button 
+            variant="outline"
+            onClick={() => navigate('/')}
+            className="flex-grow md:flex-grow-0"
+          >
+            <FileText className="h-4 w-4 mr-2" />
+            Dashboard
+          </Button>
+          <Button 
+            variant="outline"
+            onClick={() => navigate('/ferramentas')}
+            className="flex-grow md:flex-grow-0"
+          >
+            <FileText className="h-4 w-4 mr-2" />
+            Ferramentas
+          </Button>
+          <Button 
+            variant="outline"
+            onClick={() => navigate('/funcionarios')}
+            className="flex-grow md:flex-grow-0"
+          >
+            <User className="h-4 w-4 mr-2" />
+            Funcionários
+          </Button>
+        </div>
       </div>
 
       <Card className="mb-8">
@@ -138,7 +184,7 @@ const Reports = () => {
           <CardDescription>Selecione o período e tipo de relatório desejado</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <div>
               <label className="block text-sm font-medium mb-2">Período</label>
               <DateRangePicker 
@@ -163,6 +209,19 @@ const Reports = () => {
                 </SelectContent>
               </Select>
             </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">Funcionário</label>
+              <div className="relative">
+                <Search className="absolute left-2 top-3 h-4 w-4 text-gray-400" />
+                <Input
+                  type="text"
+                  placeholder="Filtrar por funcionário"
+                  value={employeeFilter}
+                  onChange={(e) => setEmployeeFilter(e.target.value)}
+                  className="pl-8 w-full"
+                />
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -184,6 +243,7 @@ const Reports = () => {
             {date?.from && date?.to
               ? `Relatório de ${formatDate(date.from)} até ${formatDate(date.to)}`
               : "Todos os registros"}
+            {employeeFilter && ` - Filtrado por: ${employeeFilter}`}
           </CardDescription>
         </CardHeader>
         <CardContent>
