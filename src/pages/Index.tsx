@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,7 +8,7 @@ import Dashboard from "@/components/Dashboard";
 import LoansList from "@/components/LoansList";
 import AddLoanForm from "@/components/AddLoanForm";
 import { useTools } from "@/context/ToolsContext";
-import { FileText, ToolIcon, Users } from "lucide-react";
+import { FileText, Wrench, Users } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const Index = () => {
@@ -42,7 +43,7 @@ const Index = () => {
             Relatórios
           </Button>
           <Button onClick={() => navigate('/ferramentas')}>
-            <ToolIcon className="h-4 w-4 mr-2" />
+            <Wrench className="h-4 w-4 mr-2" />
             Ferramentas
           </Button>
           <Button onClick={() => navigate('/funcionarios')}>
