@@ -9,7 +9,114 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      employees: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          role: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          role: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          role?: string
+        }
+        Relationships: []
+      }
+      loans: {
+        Row: {
+          borrow_date: string
+          borrower: string
+          created_at: string
+          employee_id: string | null
+          expected_return_date: string | null
+          id: string
+          is_third_party: boolean
+          return_date: string | null
+          role: string | null
+          status: string
+          tool_id: string
+          tool_name: string
+        }
+        Insert: {
+          borrow_date?: string
+          borrower: string
+          created_at?: string
+          employee_id?: string | null
+          expected_return_date?: string | null
+          id?: string
+          is_third_party?: boolean
+          return_date?: string | null
+          role?: string | null
+          status?: string
+          tool_id: string
+          tool_name: string
+        }
+        Update: {
+          borrow_date?: string
+          borrower?: string
+          created_at?: string
+          employee_id?: string | null
+          expected_return_date?: string | null
+          id?: string
+          is_third_party?: boolean
+          return_date?: string | null
+          role?: string | null
+          status?: string
+          tool_id?: string
+          tool_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loans_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loans_tool_id_fkey"
+            columns: ["tool_id"]
+            isOneToOne: false
+            referencedRelation: "tools"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tools: {
+        Row: {
+          available: number
+          category: string
+          created_at: string
+          id: string
+          name: string
+          quantity: number
+        }
+        Insert: {
+          available?: number
+          category: string
+          created_at?: string
+          id?: string
+          name: string
+          quantity?: number
+        }
+        Update: {
+          available?: number
+          category?: string
+          created_at?: string
+          id?: string
+          name?: string
+          quantity?: number
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

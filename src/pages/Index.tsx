@@ -8,11 +8,28 @@ import Dashboard from "@/components/Dashboard";
 import LoansList from "@/components/LoansList";
 import AddLoanForm from "@/components/AddLoanForm";
 import { useTools } from "@/context/ToolsContext";
-import { FileText } from "lucide-react";
+import { FileText, Tool, Users } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const Index = () => {
   const navigate = useNavigate();
-  const { tools, loans, addLoan, returnTool } = useTools();
+  const { tools, loans, employees, addLoan, returnTool, isLoading } = useTools();
+  
+  if (isLoading) {
+    return (
+      <div className="container mx-auto py-10">
+        <div className="flex justify-between items-center mb-8">
+          <Skeleton className="h-8 w-80" />
+          <div className="space-x-4">
+            <Skeleton className="h-10 w-32 inline-block" />
+            <Skeleton className="h-10 w-40 inline-block" />
+          </div>
+        </div>
+        <Skeleton className="h-12 w-full mb-8" />
+        <Skeleton className="h-[400px] w-full" />
+      </div>
+    );
+  }
   
   return (
     <div className="container mx-auto py-10">
@@ -26,7 +43,12 @@ const Index = () => {
             Relatórios
           </Button>
           <Button onClick={() => navigate('/ferramentas')}>
-            Gerenciar Ferramentas
+            <Tool className="h-4 w-4 mr-2" />
+            Ferramentas
+          </Button>
+          <Button onClick={() => navigate('/funcionarios')}>
+            <Users className="h-4 w-4 mr-2" />
+            Funcionários
           </Button>
         </div>
       </div>
@@ -51,7 +73,7 @@ const Index = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <LoansList loans={loans} onReturn={returnTool} />
+              <LoansList loans={loans} employees={employees} onReturn={returnTool} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -65,7 +87,7 @@ const Index = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <AddLoanForm tools={tools} onAddLoan={addLoan} />
+              <AddLoanForm tools={tools} employees={employees} onAddLoan={addLoan} />
             </CardContent>
           </Card>
         </TabsContent>

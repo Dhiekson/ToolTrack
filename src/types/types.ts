@@ -13,6 +13,12 @@ export interface Tool {
   available: number;
 }
 
+export interface Employee {
+  id: string;
+  name: string;
+  role: string;
+}
+
 export interface Loan {
   id: string;
   toolId: string;
@@ -21,7 +27,8 @@ export interface Loan {
   role: string; // Função do funcionário (mecânico/eletricista) ou vazio para terceiros
   isThirdParty: boolean;
   borrowDate: Date;
-  expectedReturnDate: Date;
+  expectedReturnDate: Date | null;
   returnDate: Date | null;
   status: "active" | "returned";
+  employeeId?: string | null;
 }

@@ -1,66 +1,321 @@
 
 import { useState } from "react";
-import { Loan } from "@/types/types";
+import { Loan, Employee } from "@/types/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatDate } from "@/lib/utils";
+import { Download, Search, Calendar, User } from "lucide-react";
+import { 
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { format, isWithinInterval, startOfDay, endOfDay, parseISO } from "date-fns";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { cn } from "@/lib/utils";
+import { jsPDF } from "jspdf";
+import "jspdf-autotable";
 
 interface LoansListProps {
   loans: Loan[];
+  employees: Employee[];
   onReturn: (id: string) => void;
 }
 
-const LoansList = ({ loans, onReturn }: LoansListProps) => {
+declare module "jspdf" {
+  interface jsPDF {
+    autoTable: (options: any) => jsPDF;
+  }
+}
+
+const LoansList = ({ loans, employees, onReturn }: LoansListProps) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [employeeFilter, setEmployeeFilter] = useState<string | null>(null);
+  const [dateRange, setDateRange] = useState<{
+    from: Date | undefined;
+    to: Date | undefined;
+  }>({
+    from: undefined,
+    to: undefined,
+  });
+  const [openEmployeeSelector, setOpenEmployeeSelector] = useState(false);
+  const [employeeSearchQuery, setEmployeeSearchQuery] = useState("");
 
-  const filteredLoans = loans.filter(
-    (loan) =>
-      (searchTerm === "" ||
-        loan.toolName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        loan.borrower.toLowerCase().includes(searchTerm.toLowerCase())) &&
-      (statusFilter === "all" || loan.status === statusFilter)
+  // Filter loans based on all filters
+  const filteredLoans = loans.filter((loan) => {
+    // Text search filter
+    const matchesSearch = 
+      searchTerm === "" ||
+      loan.toolName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      loan.borrower.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    // Status filter
+    const matchesStatus = statusFilter === "all" || loan.status === statusFilter;
+    
+    // Employee filter
+    const matchesEmployee = !employeeFilter || loan.employeeId === employeeFilter;
+    
+    // Date range filter
+    let matchesDateRange = true;
+    if (dateRange.from && dateRange.to) {
+      matchesDateRange = isWithinInterval(loan.borrowDate, {
+        start: startOfDay(dateRange.from),
+        end: endOfDay(dateRange.to)
+      });
+    }
+    
+    return matchesSearch && matchesStatus && matchesEmployee && matchesDateRange;
+  });
+
+  const filteredEmployees = employees.filter(employee => 
+    employee.name.toLowerCase().includes(employeeSearchQuery.toLowerCase()) ||
+    employee.role.toLowerCase().includes(employeeSearchQuery.toLowerCase())
   );
 
   const isOverdue = (loan: Loan) => {
     return (
       loan.status === "active" &&
-      loan.isThirdParty &&
+      loan.expectedReturnDate !== null &&
       loan.expectedReturnDate < new Date()
     );
   };
 
+  const handleClearFilters = () => {
+    setSearchTerm("");
+    setStatusFilter("all");
+    setEmployeeFilter(null);
+    setDateRange({ from: undefined, to: undefined });
+  };
+
+  const generatePDF = () => {
+    // Create a new PDF document
+    const doc = new jsPDF();
+    
+    // Add title
+    doc.setFontSize(16);
+    doc.text("Relatório de Empréstimos de Ferramentas", 14, 15);
+    
+    // Add filters applied
+    doc.setFontSize(10);
+    let yPos = 25;
+    
+    doc.text(`Data de geração: ${format(new Date(), "dd/MM/yyyy HH:mm")}`, 14, yPos);
+    yPos += 5;
+    
+    if (statusFilter !== "all") {
+      doc.text(`Status: ${statusFilter === "active" ? "Em uso" : "Devolvidos"}`, 14, yPos);
+      yPos += 5;
+    }
+    
+    if (employeeFilter) {
+      const employee = employees.find(e => e.id === employeeFilter);
+      if (employee) {
+        doc.text(`Funcionário: ${employee.name}`, 14, yPos);
+        yPos += 5;
+      }
+    }
+    
+    if (dateRange.from && dateRange.to) {
+      doc.text(`Período: ${format(dateRange.from, "dd/MM/yyyy")} a ${format(dateRange.to, "dd/MM/yyyy")}`, 14, yPos);
+      yPos += 5;
+    }
+    
+    // Add table data
+    const tableData = filteredLoans.map(loan => [
+      loan.toolName,
+      loan.borrower,
+      loan.isThirdParty ? "Terceiro" : loan.role,
+      formatDate(loan.borrowDate, false),
+      loan.expectedReturnDate ? formatDate(loan.expectedReturnDate, false) : "-",
+      loan.returnDate ? formatDate(loan.returnDate, false) : "-",
+      loan.status === "active" ? (isOverdue(loan) ? "Atrasado" : "Em uso") : "Devolvido"
+    ]);
+    
+    // Generate the table
+    doc.autoTable({
+      startY: yPos + 5,
+      head: [["Ferramenta", "Responsável", "Função", "Saída", "Devolução Prevista", "Devolução Real", "Status"]],
+      body: tableData,
+      theme: "striped",
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [66, 139, 202] },
+      margin: { top: 30 }
+    });
+    
+    // Add signature area for employees
+    if (employeeFilter) {
+      const employee = employees.find(e => e.id === employeeFilter);
+      if (employee) {
+        const lastY = (doc as any).lastAutoTable.finalY || 150;
+        doc.line(14, lastY + 30, 90, lastY + 30);
+        doc.text(`Assinatura de ${employee.name}`, 14, lastY + 35);
+        doc.text("Data: ___/___/______", 14, lastY + 45);
+      }
+    }
+    
+    // Save the PDF
+    doc.save("relatorio-emprestimos.pdf");
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-col md:flex-row gap-4">
-        <div className="flex-1">
-          <Input
-            placeholder="Buscar por ferramenta ou responsável..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="md:col-span-2">
+          <div className="flex items-center">
+            <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+            <Input
+              placeholder="Buscar por ferramenta ou responsável..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
         </div>
-        <Select
-          value={statusFilter}
-          onValueChange={setStatusFilter}
-        >
-          <SelectTrigger className="w-full md:w-[180px]">
-            <SelectValue placeholder="Todos status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos status</SelectItem>
-            <SelectItem value="active">Em uso</SelectItem>
-            <SelectItem value="returned">Devolvidos</SelectItem>
-          </SelectContent>
-        </Select>
+        
+        <div>
+          <Select
+            value={statusFilter}
+            onValueChange={setStatusFilter}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Todos status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos status</SelectItem>
+              <SelectItem value="active">Em uso</SelectItem>
+              <SelectItem value="returned">Devolvidos</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        
+        <div>
+          <Popover open={openEmployeeSelector} onOpenChange={setOpenEmployeeSelector}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                aria-expanded={openEmployeeSelector}
+                className="w-full justify-between"
+              >
+                {employeeFilter
+                  ? employees.find((e) => e.id === employeeFilter)?.name || "Funcionário"
+                  : "Todos funcionários"}
+                <User className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-full p-0">
+              <Command>
+                <CommandInput
+                  placeholder="Buscar funcionário..."
+                  value={employeeSearchQuery}
+                  onValueChange={setEmployeeSearchQuery}
+                  className="h-9"
+                />
+                <CommandList>
+                  <CommandEmpty>Nenhum funcionário encontrado</CommandEmpty>
+                  <CommandGroup>
+                    <CommandItem
+                      value="all"
+                      onSelect={() => {
+                        setEmployeeFilter(null);
+                        setOpenEmployeeSelector(false);
+                      }}
+                    >
+                      Todos funcionários
+                    </CommandItem>
+                    {filteredEmployees.map((employee) => (
+                      <CommandItem
+                        key={employee.id}
+                        value={employee.id}
+                        onSelect={() => {
+                          setEmployeeFilter(employee.id);
+                          setOpenEmployeeSelector(false);
+                        }}
+                      >
+                        {employee.name}
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          ({employee.role})
+                        </span>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+        </div>
+        
+        <div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant={"outline"}
+                className={cn(
+                  "w-full justify-between text-left font-normal",
+                  !dateRange.from && "text-muted-foreground"
+                )}
+              >
+                {dateRange.from ? (
+                  dateRange.to ? (
+                    `${format(dateRange.from, "dd/MM/yyyy")} - ${format(dateRange.to, "dd/MM/yyyy")}`
+                  ) : (
+                    format(dateRange.from, "dd/MM/yyyy")
+                  )
+                ) : (
+                  "Filtrar por data"
+                )}
+                <Calendar className="ml-auto h-4 w-4 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0">
+              <CalendarComponent
+                mode="range"
+                selected={{ 
+                  from: dateRange.from || new Date(), 
+                  to: dateRange.to || new Date() 
+                }}
+                onSelect={setDateRange}
+                numberOfMonths={2}
+                initialFocus
+              />
+              <div className="p-3 border-t flex justify-between">
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => setDateRange({ from: undefined, to: undefined })}
+                >
+                  Limpar
+                </Button>
+                <Button 
+                  size="sm"
+                  onClick={() => {}}
+                >
+                  Aplicar
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
+      </div>
+
+      <div className="flex justify-between items-center">
+        <Button variant="outline" onClick={handleClearFilters}>
+          Limpar filtros
+        </Button>
+        
+        <Button onClick={generatePDF}>
+          <Download className="mr-2 h-4 w-4" />
+          Gerar Relatório PDF
+        </Button>
       </div>
 
       {filteredLoans.length > 0 ? (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto rounded-lg border">
           <table className="w-full">
             <thead>
-              <tr className="border-b">
+              <tr className="bg-muted/50">
                 <th className="px-4 py-3 text-left">Ferramenta</th>
                 <th className="px-4 py-3 text-left">Responsável</th>
                 <th className="px-4 py-3 text-left">Saída</th>
@@ -89,7 +344,7 @@ const LoansList = ({ loans, onReturn }: LoansListProps) => {
                   </td>
                   <td className="px-4 py-3">{formatDate(loan.borrowDate, true)}</td>
                   <td className="px-4 py-3">
-                    {loan.isThirdParty ? formatDate(loan.expectedReturnDate, true) : "-"}
+                    {loan.expectedReturnDate ? formatDate(loan.expectedReturnDate, true) : "-"}
                   </td>
                   <td className="px-4 py-3">
                     {loan.returnDate ? formatDate(loan.returnDate, true) : "-"}

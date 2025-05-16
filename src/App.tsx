@@ -8,6 +8,7 @@ import { ToolsProvider } from "./context/ToolsContext";
 import Index from "./pages/Index";
 import Tools from "./pages/Tools";
 import Reports from "./pages/Reports";
+import Employees from "./pages/Employees";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -22,6 +23,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/ferramentas" element={<Tools />} />
+            <Route path="/funcionarios" element={<Employees />} />
             <Route path="/relatorios" element={<Reports />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
