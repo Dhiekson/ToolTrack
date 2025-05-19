@@ -1,9 +1,9 @@
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, CalendarDays, FileText, Download, Search, User } from "lucide-react";
+import { ArrowLeft, CalendarDays, FileText, Download, Search, User, Printer, Filter } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { Tabs, TabsList, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { DateRange } from "react-day-picker";
@@ -22,6 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { jsPDF } from "jspdf";
 import { format } from "date-fns";
 import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 // Need to include jspdf-autotable as a side effect to add autoTable method to jsPDF
 import "jspdf-autotable";
 
@@ -44,24 +45,42 @@ const Reports = () => {
   });
   const [reportType, setReportType] = useState<string>("all");
   const [employeeFilter, setEmployeeFilter] = useState<string>("");
+  const printRef = useRef<HTMLDivElement>(null);
+
+  // Ordenar funcionários por ordem alfabética
+  const sortedEmployees = [...employees].sort((a, b) => 
+    a.name.localeCompare(b.name, 'pt-BR')
+  );
+
+  // Obter nomes únicos dos funcionários para o filtro, ordenados alfabeticamente
+  const uniqueBorrowers = Array.from(new Set(loans.map(loan => loan.borrower)))
+    .sort((a, b) => a.localeCompare(b, 'pt-BR'));
 
   // Filtrar empréstimos com base na data, tipo e funcionário
   const filteredLoans = loans.filter(loan => {
-    if (!date?.from || !date?.to) return true;
-    
-    const loanDate = loan.status === "returned" ? loan.returnDate : loan.borrowDate;
-    if (!loanDate) return false;
-    
-    const isWithinDateRange = loanDate >= date.from && loanDate <= date.to;
+    // Primeiro, aplicar filtro de funcionário
     const matchesEmployee = employeeFilter === "" || 
       loan.borrower.toLowerCase().includes(employeeFilter.toLowerCase());
     
-    if (reportType === "all") return isWithinDateRange && matchesEmployee;
-    if (reportType === "active") return isWithinDateRange && loan.status === "active" && matchesEmployee;
-    if (reportType === "returned") return isWithinDateRange && loan.status === "returned" && matchesEmployee;
+    if (!matchesEmployee) return false;
     
-    return isWithinDateRange && matchesEmployee;
-  });
+    // Em seguida, aplicar filtro de data
+    if (date?.from && date?.to) {
+      const loanDate = loan.status === "returned" ? loan.returnDate : loan.borrowDate;
+      if (!loanDate) return false;
+      
+      const isWithinDateRange = loanDate >= date.from && loanDate <= date.to;
+      if (!isWithinDateRange) return false;
+    }
+    
+    // Por fim, aplicar filtro de status
+    if (reportType === "all") return true;
+    if (reportType === "active") return loan.status === "active";
+    if (reportType === "returned") return loan.status === "returned";
+    
+    return true;
+  })
+  .sort((a, b) => a.toolName.localeCompare(b.toolName, 'pt-BR'));
 
   // Função para gerar PDF de relatórios
   const generatePDF = () => {
@@ -121,13 +140,24 @@ const Reports = () => {
       
       // Save the PDF
       doc.save("relatorio-emprestimos.pdf");
+      
+      toast.success("Relatório PDF gerado com sucesso");
     } catch (error) {
       console.error("Erro ao gerar PDF:", error);
+      toast.error("Erro ao gerar PDF. Verifique o console para mais detalhes.");
     }
   };
-
-  // Obter nomes únicos dos funcionários para o filtro
-  const uniqueBorrowers = Array.from(new Set(loans.map(loan => loan.borrower)));
+  
+  // Função para imprimir a página
+  const handlePrint = () => {
+    try {
+      window.print();
+      toast.success("Comando de impressão enviado");
+    } catch (error) {
+      console.error("Erro ao imprimir:", error);
+      toast.error("Erro ao imprimir. Verifique o console para mais detalhes.");
+    }
+  };
 
   return (
     <div className="container mx-auto py-10">
@@ -151,7 +181,6 @@ const Reports = () => {
           <Button 
             variant="outline"
             onClick={() => navigate('/')}
-            className="flex-grow md:flex-grow-0"
           >
             <FileText className="h-4 w-4 mr-2" />
             Dashboard
@@ -159,7 +188,6 @@ const Reports = () => {
           <Button 
             variant="outline"
             onClick={() => navigate('/ferramentas')}
-            className="flex-grow md:flex-grow-0"
           >
             <FileText className="h-4 w-4 mr-2" />
             Ferramentas
@@ -167,7 +195,6 @@ const Reports = () => {
           <Button 
             variant="outline"
             onClick={() => navigate('/funcionarios')}
-            className="flex-grow md:flex-grow-0"
           >
             <User className="h-4 w-4 mr-2" />
             Funcionários
@@ -175,10 +202,10 @@ const Reports = () => {
         </div>
       </div>
 
-      <Card className="mb-8">
+      <Card className="mb-8 print:hidden">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
+            <Filter className="h-5 w-5" />
             Filtros de Relatório
           </CardTitle>
           <CardDescription>Selecione o período e tipo de relatório desejado</CardDescription>
@@ -211,11 +238,31 @@ const Reports = () => {
             </div>
             <div>
               <label className="block text-sm font-medium mb-2">Funcionário</label>
+              <Select
+                value={employeeFilter}
+                onValueChange={setEmployeeFilter}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Todos os funcionários" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Todos os funcionários</SelectItem>
+                  {uniqueBorrowers.map(borrower => (
+                    <SelectItem key={borrower} value={borrower}>{borrower}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          
+          <div className="pt-4 flex justify-center gap-4 flex-wrap">
+            <div className="w-full md:w-auto">
+              <label className="block text-sm font-medium mb-2">Busca por Funcionário</label>
               <div className="relative">
                 <Search className="absolute left-2 top-3 h-4 w-4 text-gray-400" />
                 <Input
                   type="text"
-                  placeholder="Filtrar por funcionário"
+                  placeholder="Filtrar por nome do funcionário"
                   value={employeeFilter}
                   onChange={(e) => setEmployeeFilter(e.target.value)}
                   className="pl-8 w-full"
@@ -226,14 +273,18 @@ const Reports = () => {
         </CardContent>
       </Card>
 
-      <div className="flex justify-end mb-6">
-        <Button onClick={generatePDF}>
+      <div className="flex justify-end mb-6 gap-4 flex-wrap print:hidden">
+        <Button onClick={generatePDF} className="flex-grow md:flex-grow-0">
           <Download className="mr-2 h-4 w-4" />
-          Gerar Relatório PDF
+          Gerar PDF
+        </Button>
+        <Button onClick={handlePrint} className="flex-grow md:flex-grow-0">
+          <Printer className="mr-2 h-4 w-4" />
+          Imprimir
         </Button>
       </div>
 
-      <Card>
+      <Card ref={printRef}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <CalendarDays className="h-5 w-5" />
@@ -244,6 +295,7 @@ const Reports = () => {
               ? `Relatório de ${formatDate(date.from)} até ${formatDate(date.to)}`
               : "Todos os registros"}
             {employeeFilter && ` - Filtrado por: ${employeeFilter}`}
+            {reportType !== "all" && ` - Status: ${reportType === "active" ? "Em uso" : "Devolvidos"}`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -308,7 +360,7 @@ const Reports = () => {
             </div>
           ) : (
             <div className="text-center py-8 text-muted-foreground">
-              Nenhum empréstimo encontrado para o período selecionado.
+              Nenhum empréstimo encontrado para os critérios selecionados.
             </div>
           )}
         </CardContent>
