@@ -1,4 +1,3 @@
-
 import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -44,7 +43,7 @@ const Reports = () => {
     to: new Date(),
   });
   const [reportType, setReportType] = useState<string>("all");
-  const [employeeFilter, setEmployeeFilter] = useState<string>("");
+  const [employeeFilter, setEmployeeFilter] = useState<string>("all");
   const printRef = useRef<HTMLDivElement>(null);
 
   // Ordenar funcionários por ordem alfabética
@@ -59,7 +58,7 @@ const Reports = () => {
   // Filtrar empréstimos com base na data, tipo e funcionário
   const filteredLoans = loans.filter(loan => {
     // Primeiro, aplicar filtro de funcionário
-    const matchesEmployee = employeeFilter === "" || 
+    const matchesEmployee = employeeFilter === "all" || 
       loan.borrower.toLowerCase().includes(employeeFilter.toLowerCase());
     
     if (!matchesEmployee) return false;
@@ -104,7 +103,7 @@ const Reports = () => {
         yPos += 5;
       }
       
-      if (employeeFilter !== "") {
+      if (employeeFilter !== "all") {
         doc.text(`Funcionário: ${employeeFilter}`, 14, yPos);
         yPos += 5;
       }
@@ -246,7 +245,7 @@ const Reports = () => {
                   <SelectValue placeholder="Todos os funcionários" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todos os funcionários</SelectItem>
+                  <SelectItem value="all">Todos os funcionários</SelectItem>
                   {uniqueBorrowers.map(borrower => (
                     <SelectItem key={borrower} value={borrower}>{borrower}</SelectItem>
                   ))}
@@ -263,8 +262,8 @@ const Reports = () => {
                 <Input
                   type="text"
                   placeholder="Filtrar por nome do funcionário"
-                  value={employeeFilter}
-                  onChange={(e) => setEmployeeFilter(e.target.value)}
+                  value={employeeFilter === "all" ? "" : employeeFilter} 
+                  onChange={(e) => setEmployeeFilter(e.target.value || "all")}
                   className="pl-8 w-full"
                 />
               </div>
@@ -294,7 +293,7 @@ const Reports = () => {
             {date?.from && date?.to
               ? `Relatório de ${formatDate(date.from)} até ${formatDate(date.to)}`
               : "Todos os registros"}
-            {employeeFilter && ` - Filtrado por: ${employeeFilter}`}
+            {employeeFilter !== "all" && ` - Filtrado por: ${employeeFilter}`}
             {reportType !== "all" && ` - Status: ${reportType === "active" ? "Em uso" : "Devolvidos"}`}
           </CardDescription>
         </CardHeader>
