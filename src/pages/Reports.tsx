@@ -1,8 +1,9 @@
+
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, CalendarDays, FileText, Download, Search, User, Printer, Filter, Building, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, CalendarDays, FileText, Download, Search, User, Printer, Filter, Building, Pencil, Trash2, ChevronRight, Eye } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { DateRange } from "react-day-picker";
 import { DateRangePicker } from "@/components/DateRangePicker";
@@ -52,6 +53,12 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 
 // Schema for print dialog form
 const printFormSchema = z.object({
@@ -88,8 +95,15 @@ const thirdPartySchema = z.object({
   role: z.string().min(1, "Função é obrigatória")
 });
 
+// Schema for adding employee to third-party company
+const thirdPartyEmployeeSchema = z.object({
+  employeeName: z.string().min(1, "Nome do funcionário é obrigatório"),
+  role: z.string().min(1, "Função é obrigatória")
+});
+
 type PrintFormValues = z.infer<typeof printFormSchema>;
 type ThirdPartyFormValues = z.infer<typeof thirdPartySchema>;
+type ThirdPartyEmployeeFormValues = z.infer<typeof thirdPartyEmployeeSchema>;
 
 const Reports = () => {
   const navigate = useNavigate();
@@ -108,7 +122,10 @@ const Reports = () => {
   const [editingThirdParty, setEditingThirdParty] = useState<ThirdParty | null>(null);
   const [thirdPartyToDelete, setThirdPartyToDelete] = useState<ThirdParty | null>(null);
   const [thirdPartyAlertOpen, setThirdPartyAlertOpen] = useState(false);
-  const [thirdPartyList, setThirdPartyList] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<string>("reports");
+  const [selectedCompany, setSelectedCompany] = useState<ThirdParty | null>(null);
+  const [companyViewOpen, setCompanyViewOpen] = useState(false);
+  const [addEmployeeDialogOpen, setAddEmployeeDialogOpen] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
   
   // Form for print dialog
@@ -128,6 +145,15 @@ const Reports = () => {
     resolver: zodResolver(thirdPartySchema),
     defaultValues: {
       companyName: "",
+      employeeName: "",
+      role: ""
+    }
+  });
+  
+  // Form for adding employee to third-party company
+  const thirdPartyEmployeeForm = useForm<ThirdPartyEmployeeFormValues>({
+    resolver: zodResolver(thirdPartyEmployeeSchema),
+    defaultValues: {
       employeeName: "",
       role: ""
     }
@@ -168,6 +194,21 @@ const Reports = () => {
   const sortedThirdParties = [...(thirdParties || [])].sort((a, b) => 
     a.companyName.localeCompare(b.companyName, 'pt-BR') || 
     a.employeeName.localeCompare(b.employeeName, 'pt-BR')
+  );
+  
+  // Agrupar terceiros por empresa
+  const groupedThirdParties = sortedThirdParties.reduce((acc, tp) => {
+    const companyName = tp.companyName;
+    if (!acc[companyName]) {
+      acc[companyName] = [];
+    }
+    acc[companyName].push(tp);
+    return acc;
+  }, {} as Record<string, ThirdParty[]>);
+  
+  // Lista de empresas únicas
+  const uniqueCompanies = Object.keys(groupedThirdParties).sort((a, b) => 
+    a.localeCompare(b, 'pt-BR')
   );
 
   // Obter nomes únicos dos funcionários para o filtro, ordenados alfabeticamente
@@ -260,9 +301,41 @@ const Reports = () => {
       
       setThirdPartyDialogOpen(false);
       thirdPartyForm.reset();
+      toast.success(editingThirdParty ? "Terceiro atualizado com sucesso" : "Terceiro adicionado com sucesso");
     } catch (error) {
       console.error("Erro ao adicionar/atualizar terceiro:", error);
       toast.error("Erro ao adicionar/atualizar terceiro. Tente novamente.");
+    }
+  };
+
+  // Função para adicionar funcionário à empresa terceira
+  const handleAddEmployeeToCompany = (data: ThirdPartyEmployeeFormValues) => {
+    try {
+      if (selectedCompany) {
+        // Adicionar funcionário à empresa selecionada
+        addThirdParty({
+          companyName: selectedCompany.companyName,
+          employeeName: data.employeeName,
+          role: data.role
+        });
+        
+        setAddEmployeeDialogOpen(false);
+        thirdPartyEmployeeForm.reset();
+        toast.success("Funcionário adicionado com sucesso");
+        
+        // Atualizar a visualização da empresa
+        if (companyViewOpen) {
+          const updatedCompany = {
+            ...selectedCompany,
+            employeeName: data.employeeName,
+            role: data.role
+          };
+          setSelectedCompany(updatedCompany);
+        }
+      }
+    } catch (error) {
+      console.error("Erro ao adicionar funcionário:", error);
+      toast.error("Erro ao adicionar funcionário. Tente novamente.");
     }
   };
 
@@ -278,6 +351,7 @@ const Reports = () => {
       deleteThirdParty(thirdPartyToDelete.companyName, thirdPartyToDelete.employeeName);
       setThirdPartyToDelete(null);
       setThirdPartyAlertOpen(false);
+      toast.success("Terceiro removido com sucesso");
     }
   };
 
@@ -285,6 +359,27 @@ const Reports = () => {
   const openDeleteDialog = (thirdParty: ThirdParty) => {
     setThirdPartyToDelete(thirdParty);
     setThirdPartyAlertOpen(true);
+  };
+  
+  // Função para visualizar empresa terceira
+  const viewCompany = (companyName: string) => {
+    const companyEmployees = groupedThirdParties[companyName] || [];
+    if (companyEmployees.length > 0) {
+      setSelectedCompany({
+        companyName,
+        employeeName: companyEmployees[0].employeeName,
+        role: companyEmployees[0].role
+      });
+      setCompanyViewOpen(true);
+    }
+  };
+  
+  // Função para adicionar funcionário à empresa selecionada
+  const addEmployeeToCompany = () => {
+    if (selectedCompany) {
+      thirdPartyEmployeeForm.reset();
+      setAddEmployeeDialogOpen(true);
+    }
   };
 
   // Função para gerar PDF de relatórios
@@ -607,8 +702,8 @@ const Reports = () => {
     }
   };
 
-  // Função para renderizar a lista de terceiros
-  const renderThirdPartyList = () => {
+  // Função para renderizar a lista de empresas terceiras
+  const renderThirdPartyCompaniesList = () => {
     return (
       <div className="mt-4 space-y-4">
         <div className="flex justify-between items-center">
@@ -621,35 +716,99 @@ const Reports = () => {
               setThirdPartyDialogOpen(true);
             }}
           >
-            Adicionar Novo
+            Adicionar Nova Empresa
           </Button>
         </div>
         
-        {sortedThirdParties.length > 0 ? (
+        {uniqueCompanies.length > 0 ? (
           <div className="space-y-2">
-            {sortedThirdParties.map((tp, index) => (
+            {uniqueCompanies.map((companyName) => {
+              const employees = groupedThirdParties[companyName];
+              return (
+                <Card key={companyName} className="overflow-hidden">
+                  <CardHeader className="p-4 pb-2">
+                    <div className="flex justify-between items-center">
+                      <CardTitle className="text-lg">{companyName}</CardTitle>
+                      <div className="flex gap-2">
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => viewCompany(companyName)}
+                        >
+                          <Eye size={16} className="mr-1" />
+                          Ver Funcionários
+                        </Button>
+                      </div>
+                    </div>
+                    <CardDescription>
+                      {employees.length} {employees.length === 1 ? 'funcionário cadastrado' : 'funcionários cadastrados'}
+                    </CardDescription>
+                  </CardHeader>
+                </Card>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="p-8 text-center text-muted-foreground border rounded-md">
+            Nenhuma empresa terceira cadastrada
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Função para renderizar a lista de funcionários de uma empresa
+  const renderCompanyEmployees = () => {
+    if (!selectedCompany) return null;
+    
+    const companyEmployees = groupedThirdParties[selectedCompany.companyName] || [];
+    
+    return (
+      <div className="space-y-4">
+        <div className="flex justify-between items-center">
+          <div>
+            <h3 className="text-xl font-bold">{selectedCompany.companyName}</h3>
+            <p className="text-muted-foreground">Funcionários cadastrados</p>
+          </div>
+          <div className="flex gap-2">
+            <Button 
+              variant="outline"
+              onClick={() => setCompanyViewOpen(false)}
+            >
+              <ArrowLeft size={16} className="mr-2" />
+              Voltar
+            </Button>
+            <Button
+              onClick={addEmployeeToCompany}
+            >
+              Adicionar Funcionário
+            </Button>
+          </div>
+        </div>
+        
+        {companyEmployees.length > 0 ? (
+          <div className="space-y-2">
+            {companyEmployees.map((employee, index) => (
               <div 
-                key={`${tp.companyName}-${tp.employeeName}-${index}`}
-                className="p-3 border rounded-md flex justify-between items-center"
+                key={`${employee.employeeName}-${index}`} 
+                className="p-4 border rounded-md flex justify-between items-center"
               >
                 <div>
-                  <div className="font-medium">{tp.companyName}</div>
-                  <div className="text-sm text-muted-foreground">
-                    {tp.employeeName} - {tp.role}
-                  </div>
+                  <div className="font-medium">{employee.employeeName}</div>
+                  <div className="text-sm text-muted-foreground">{employee.role}</div>
                 </div>
                 <div className="flex items-center gap-2">
                   <Button 
                     variant="ghost" 
                     size="sm"
-                    onClick={() => handleEditThirdParty(tp)}
+                    onClick={() => handleEditThirdParty(employee)}
                   >
                     <Pencil size={16} />
                   </Button>
                   <Button 
                     variant="ghost" 
                     size="sm" 
-                    onClick={() => openDeleteDialog(tp)}
+                    onClick={() => openDeleteDialog(employee)}
                     className="text-red-500 hover:text-red-700"
                   >
                     <Trash2 size={16} />
@@ -660,7 +819,7 @@ const Reports = () => {
           </div>
         ) : (
           <div className="p-8 text-center text-muted-foreground border rounded-md">
-            Nenhuma empresa terceira cadastrada
+            Nenhum funcionário cadastrado para esta empresa
           </div>
         )}
       </div>
@@ -684,530 +843,515 @@ const Reports = () => {
             Relatórios de Empréstimos
           </h1>
         </div>
-        
-        <div className="flex flex-wrap gap-2">
-          <Button 
-            variant="outline"
-            onClick={() => navigate('/')}
-          >
-            <FileText className="h-4 w-4 mr-2" />
-            Dashboard
-          </Button>
-          <Button 
-            variant="outline"
-            onClick={() => navigate('/ferramentas')}
-          >
-            <FileText className="h-4 w-4 mr-2" />
-            Ferramentas
-          </Button>
-          <Button 
-            variant="outline"
-            onClick={() => navigate('/funcionarios')}
-          >
-            <User className="h-4 w-4 mr-2" />
-            Funcionários
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => setThirdPartyList(!thirdPartyList)}
-          >
-            <Building className="h-4 w-4 mr-2" />
-            {thirdPartyList ? "Ocultar Terceiros" : "Gerenciar Terceiros"}
-          </Button>
-        </div>
       </div>
 
-      {/* Lista de terceiros */}
-      {thirdPartyList && renderThirdPartyList()}
-
-      <Card className="mb-8 print:hidden">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="h-5 w-5" />
-            Filtros de Relatório
-          </CardTitle>
-          <CardDescription>Selecione o período e tipo de relatório desejado</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium mb-2">Período</label>
-              <DateRangePicker 
-                date={date}
-                onDateChange={setDate}
-                className="w-full"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">Tipo de Relatório</label>
-              <Select
-                value={reportType}
-                onValueChange={setReportType}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Todos os registros" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os registros</SelectItem>
-                  <SelectItem value="active">Empréstimos ativos</SelectItem>
-                  <SelectItem value="returned">Empréstimos devolvidos</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          
-          <div className="pt-4">
-            <label className="block text-sm font-medium mb-2">Busca por Funcionário</label>
-            <Popover open={openEmployeeSelect} onOpenChange={setOpenEmployeeSelect}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={openEmployeeSelect}
-                  className="w-full justify-between"
-                >
-                  {employeeFilter === "all" ? "Todos os funcionários" : employeeFilter}
-                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-full p-0">
-                <Command>
-                  <CommandInput 
-                    placeholder="Buscar funcionário..." 
-                    onValueChange={setEmployeeSearchValue}
+      <Tabs
+        defaultValue="reports"
+        value={activeTab}
+        onValueChange={setActiveTab}
+        className="w-full"
+      >
+        <TabsList className="mb-4">
+          <TabsTrigger value="reports">Relatórios</TabsTrigger>
+          <TabsTrigger value="thirdParties">Empresas Terceiras</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="reports" className="space-y-4">
+          {/* Filtros e conteúdo dos relatórios */}
+          <Card className="mb-8 print:hidden">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Filter className="h-5 w-5" />
+                Filtros de Relatório
+              </CardTitle>
+              <CardDescription>Selecione o período e tipo de relatório desejado</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Período</label>
+                  <DateRangePicker 
+                    date={date}
+                    onDateChange={setDate}
+                    className="w-full"
                   />
-                  <CommandEmpty>Nenhum funcionário encontrado.</CommandEmpty>
-                  <CommandGroup>
-                    <CommandItem
-                      key="all"
-                      value="all"
-                      onSelect={() => {
-                        setEmployeeFilter("all");
-                        setEmployeeSearchValue("");
-                        setOpenEmployeeSelect(false);
-                      }}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Tipo de Relatório</label>
+                  <Select
+                    value={reportType}
+                    onValueChange={setReportType}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Todos os registros" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os registros</SelectItem>
+                      <SelectItem value="active">Empréstimos ativos</SelectItem>
+                      <SelectItem value="returned">Empréstimos devolvidos</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              
+              <div className="pt-4">
+                <label className="block text-sm font-medium mb-2">Busca por Funcionário</label>
+                <Popover open={openEmployeeSelect} onOpenChange={setOpenEmployeeSelect}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={openEmployeeSelect}
+                      className="w-full justify-between"
                     >
-                      <Check
-                        className={cn(
-                          "mr-2 h-4 w-4",
-                          employeeFilter === "all" ? "opacity-100" : "opacity-0"
+                      {employeeFilter === "all" ? "Todos os funcionários" : employeeFilter}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0">
+                    <Command>
+                      <CommandInput 
+                        placeholder="Buscar funcionário..." 
+                        onValueChange={setEmployeeSearchValue}
+                      />
+                      <CommandEmpty>Nenhum funcionário encontrado.</CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                          key="all"
+                          value="all"
+                          onSelect={() => {
+                            setEmployeeFilter("all");
+                            setEmployeeSearchValue("");
+                            setOpenEmployeeSelect(false);
+                          }}
+                        >
+                          <Check
+                            className={cn(
+                              "mr-2 h-4 w-4",
+                              employeeFilter === "all" ? "opacity-100" : "opacity-0"
+                            )}
+                          />
+                          Todos os funcionários
+                        </CommandItem>
+                        {filterEmployees(employeeSearchValue).map((name) => (
+                          <CommandItem
+                            key={name}
+                            value={name}
+                            onSelect={() => {
+                              setEmployeeFilter(name);
+                              setEmployeeSearchValue("");
+                              setOpenEmployeeSelect(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                employeeFilter === name ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            {name}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="flex justify-end mb-6 gap-4 flex-wrap print:hidden">
+            <Button onClick={generatePDF} className="flex-grow md:flex-grow-0">
+              <Download className="mr-2 h-4 w-4" />
+              Gerar PDF
+            </Button>
+            
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="flex-grow md:flex-grow-0">
+                  <Printer className="mr-2 h-4 w-4" />
+                  Imprimir
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Opções de Impressão</DialogTitle>
+                  <DialogDescription>
+                    Selecione os filtros para o relatório que deseja imprimir
+                  </DialogDescription>
+                </DialogHeader>
+                
+                <Form {...printForm}>
+                  <form onSubmit={printForm.handleSubmit(handlePrintWithOptions)} className="space-y-4">
+                    <FormField
+                      control={printForm.control}
+                      name="borrowerType"
+                      render={({ field }) => (
+                        <FormItem className="space-y-3">
+                          <FormLabel>Tipo de Responsável</FormLabel>
+                          <FormControl>
+                            <RadioGroup
+                              onValueChange={field.onChange}
+                              defaultValue={field.value}
+                              value={field.value}
+                              className="flex flex-col space-y-1"
+                            >
+                              <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="all" id="borrower-all" />
+                                <Label htmlFor="borrower-all">Todos</Label>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="employee" id="borrower-employee" />
+                                <Label htmlFor="borrower-employee">Funcionários</Label>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="thirdParty" id="borrower-third" />
+                                <Label htmlFor="borrower-third">Terceiros</Label>
+                              </div>
+                            </RadioGroup>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    {/* Campo condicional para seleção de funcionário */}
+                    {borrowerType === "employee" && (
+                      <FormField
+                        control={printForm.control}
+                        name="employeeName"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-col">
+                            <FormLabel>Nome do Funcionário</FormLabel>
+                            <div className="relative">
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <FormControl>
+                                    <Button
+                                      variant="outline"
+                                      role="combobox"
+                                      className={cn(
+                                        "w-full justify-between",
+                                        !field.value && "text-muted-foreground"
+                                      )}
+                                    >
+                                      {field.value
+                                        ? field.value === "all" 
+                                          ? "Todos os funcionários" 
+                                          : field.value
+                                        : "Selecione um funcionário"}
+                                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                  </FormControl>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-full p-0">
+                                  <Command>
+                                    <CommandInput 
+                                      placeholder="Buscar funcionário..." 
+                                      onValueChange={setEmployeeSearchValue}
+                                    />
+                                    <CommandEmpty>Nenhum funcionário encontrado.</CommandEmpty>
+                                    <CommandGroup>
+                                      <CommandItem
+                                        key="all-employees"
+                                        value="all"
+                                        onSelect={() => {
+                                          printForm.setValue("employeeName", "all");
+                                          setEmployeeSearchValue("");
+                                          setShowEmployeeNotFound(false);
+                                        }}
+                                      >
+                                        <Check
+                                          className={cn(
+                                            "mr-2 h-4 w-4",
+                                            field.value === "all" ? "opacity-100" : "opacity-0"
+                                          )}
+                                        />
+                                        Todos os funcionários
+                                      </CommandItem>
+                                      {filterEmployees(employeeSearchValue).map((name) => (
+                                        <CommandItem
+                                          key={name}
+                                          value={name}
+                                          onSelect={() => {
+                                            printForm.setValue("employeeName", name);
+                                            setEmployeeSearchValue("");
+                                            setShowEmployeeNotFound(false);
+                                          }}
+                                        >
+                                          <Check
+                                            className={cn(
+                                              "mr-2 h-4 w-4",
+                                              name === field.value ? "opacity-100" : "opacity-0"
+                                            )}
+                                          />
+                                          {name}
+                                        </CommandItem>
+                                      ))}
+                                    </CommandGroup>
+                                  </Command>
+                                </PopoverContent>
+                              </Popover>
+                            </div>
+                            {showEmployeeNotFound && borrowerType === "employee" && (
+                              <p className="text-sm font-medium text-destructive">
+                                Funcionário não encontrado na lista.
+                              </p>
+                            )}
+                            <FormMessage />
+                          </FormItem>
                         )}
                       />
-                      Todos os funcionários
-                    </CommandItem>
-                    {filterEmployees(employeeSearchValue).map((name) => (
-                      <CommandItem
-                        key={name}
-                        value={name}
-                        onSelect={() => {
-                          setEmployeeFilter(name);
-                          setEmployeeSearchValue("");
-                          setOpenEmployeeSelect(false);
-                        }}
-                      >
-                        <Check
-                          className={cn(
-                            "mr-2 h-4 w-4",
-                            employeeFilter === name ? "opacity-100" : "opacity-0"
-                          )}
-                        />
-                        {name}
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                </Command>
-              </PopoverContent>
-            </Popover>
+                    )}
+                    
+                    {/* Campo condicional para seleção de terceiros */}
+                    {borrowerType === "thirdParty" && (
+                      <FormField
+                        control={printForm.control}
+                        name="thirdPartyName"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-col">
+                            <FormLabel>Nome do Terceiro</FormLabel>
+                            <div className="relative">
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <FormControl>
+                                    <Button
+                                      variant="outline"
+                                      role="combobox"
+                                      className={cn(
+                                        "w-full justify-between",
+                                        !field.value && "text-muted-foreground"
+                                      )}
+                                    >
+                                      {field.value
+                                        ? field.value === "all" 
+                                          ? "Todos os terceiros" 
+                                          : field.value
+                                        : "Selecione um terceiro"}
+                                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                  </FormControl>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-full p-0">
+                                  <Command>
+                                    <CommandInput 
+                                      placeholder="Buscar terceiro..." 
+                                      onValueChange={setEmployeeSearchValue}
+                                    />
+                                    <CommandEmpty>Nenhum terceiro encontrado.</CommandEmpty>
+                                    <CommandGroup>
+                                      <CommandItem
+                                        key="all-third-parties"
+                                        value="all"
+                                        onSelect={() => {
+                                          printForm.setValue("thirdPartyName", "all");
+                                          setEmployeeSearchValue("");
+                                          setShowEmployeeNotFound(false);
+                                        }}
+                                      >
+                                        <Check
+                                          className={cn(
+                                            "mr-2 h-4 w-4",
+                                            field.value === "all" ? "opacity-100" : "opacity-0"
+                                          )}
+                                        />
+                                        Todos os terceiros
+                                      </CommandItem>
+                                      {filterThirdParties(employeeSearchValue).map((name) => (
+                                        <CommandItem
+                                          key={name}
+                                          value={name}
+                                          onSelect={() => {
+                                            printForm.setValue("thirdPartyName", name);
+                                            setEmployeeSearchValue("");
+                                            setShowEmployeeNotFound(false);
+                                          }}
+                                        >
+                                          <Check
+                                            className={cn(
+                                              "mr-2 h-4 w-4",
+                                              name === field.value ? "opacity-100" : "opacity-0"
+                                            )}
+                                          />
+                                          {name}
+                                        </CommandItem>
+                                      ))}
+                                    </CommandGroup>
+                                  </Command>
+                                </PopoverContent>
+                              </Popover>
+                            </div>
+                            {showEmployeeNotFound && borrowerType === "thirdParty" && (
+                              <p className="text-sm font-medium text-destructive">
+                                Terceiro não encontrado na lista.
+                              </p>
+                            )}
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    )}
+                    
+                    <FormField
+                      control={printForm.control}
+                      name="loanStatus"
+                      render={({ field }) => (
+                        <FormItem className="space-y-3">
+                          <FormLabel>Status dos Empréstimos</FormLabel>
+                          <FormControl>
+                            <RadioGroup
+                              onValueChange={field.onChange}
+                              defaultValue={field.value}
+                              value={field.value}
+                              className="flex flex-col space-y-1"
+                            >
+                              <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="all" id="all" />
+                                <Label htmlFor="all">Todos</Label>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="active" id="active" />
+                                <Label htmlFor="active">Em uso</Label>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="returned" id="returned" />
+                                <Label htmlFor="returned">Devolvidos</Label>
+                              </div>
+                            </RadioGroup>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={printForm.control}
+                      name="printerType"
+                      render={({ field }) => (
+                        <FormItem className="space-y-3">
+                          <FormLabel>Tipo de Impressora</FormLabel>
+                          <FormControl>
+                            <RadioGroup
+                              onValueChange={field.onChange}
+                              defaultValue={field.value}
+                              value={field.value}
+                              className="flex flex-col space-y-1"
+                            >
+                              <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="receipt" id="receipt" />
+                                <Label htmlFor="receipt">Impressora de Cupom</Label>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="normal" id="normal" />
+                                <Label htmlFor="normal">Impressora Normal</Label>
+                              </div>
+                            </RadioGroup>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <DialogFooter>
+                      <DialogClose asChild>
+                        <Button variant="outline" type="button">Cancelar</Button>
+                      </DialogClose>
+                      <Button type="submit">Imprimir</Button>
+                    </DialogFooter>
+                  </form>
+                </Form>
+              </DialogContent>
+            </Dialog>
           </div>
-        </CardContent>
-      </Card>
 
-      <div className="flex justify-end mb-6 gap-4 flex-wrap print:hidden">
-        <Button onClick={generatePDF} className="flex-grow md:flex-grow-0">
-          <Download className="mr-2 h-4 w-4" />
-          Gerar PDF
-        </Button>
+          <Card ref={printRef}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CalendarDays className="h-5 w-5" />
+                Registro Histórico de Empréstimos
+              </CardTitle>
+              <CardDescription>
+                {date?.from && date?.to
+                  ? `Relatório de ${formatDate(date.from)} até ${formatDate(date.to)}`
+                  : "Todos os registros"}
+                {employeeFilter !== "all" && ` - Filtrado por: ${employeeFilter}`}
+                {reportType !== "all" && ` - Status: ${reportType === "active" ? "Em uso" : "Devolvidos"}`}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {filteredLoans.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Ferramenta</TableHead>
+                        <TableHead>Responsável</TableHead>
+                        <TableHead>Saída</TableHead>
+                        <TableHead>Devolução Prevista</TableHead>
+                        <TableHead>Devolução Real</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredLoans.map((loan) => (
+                        <TableRow key={loan.id}>
+                          <TableCell>{loan.toolName}</TableCell>
+                          <TableCell>
+                            {loan.borrower}
+                            {!loan.isThirdParty && loan.role && (
+                              <div className="text-xs text-muted-foreground">
+                                {loan.role}
+                              </div>
+                            )}
+                            {loan.isThirdParty && (
+                              <div className="text-xs text-muted-foreground">
+                                Terceiro
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell>{formatDate(loan.borrowDate, true)}</TableCell>
+                          <TableCell>
+                            {loan.isThirdParty && loan.expectedReturnDate ? formatDate(loan.expectedReturnDate, true) : "-"}
+                          </TableCell>
+                          <TableCell>
+                            {loan.returnDate ? formatDate(loan.returnDate, true) : "-"}
+                          </TableCell>
+                          <TableCell>
+                            <span
+                              className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
+                                loan.status === "active"
+                                  ? loan.isThirdParty && loan.expectedReturnDate && loan.expectedReturnDate < new Date()
+                                    ? "bg-red-100 text-red-800"
+                                    : "bg-blue-100 text-blue-800"
+                                  : "bg-green-100 text-green-800"
+                              }`}
+                            >
+                              {loan.status === "active"
+                                ? loan.isThirdParty && loan.expectedReturnDate && loan.expectedReturnDate < new Date()
+                                  ? "Atrasado"
+                                  : "Em uso"
+                                : "Devolvido"}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  Nenhum empréstimo encontrado para os critérios selecionados.
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
         
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="flex-grow md:flex-grow-0">
-              <Printer className="mr-2 h-4 w-4" />
-              Imprimir
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Opções de Impressão</DialogTitle>
-              <DialogDescription>
-                Selecione os filtros para o relatório que deseja imprimir
-              </DialogDescription>
-            </DialogHeader>
-            
-            <Form {...printForm}>
-              <form onSubmit={printForm.handleSubmit(handlePrintWithOptions)} className="space-y-4">
-                <FormField
-                  control={printForm.control}
-                  name="borrowerType"
-                  render={({ field }) => (
-                    <FormItem className="space-y-3">
-                      <FormLabel>Tipo de Responsável</FormLabel>
-                      <FormControl>
-                        <RadioGroup
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
-                          value={field.value}
-                          className="flex flex-col space-y-1"
-                        >
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="all" id="borrower-all" />
-                            <Label htmlFor="borrower-all">Todos</Label>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="employee" id="borrower-employee" />
-                            <Label htmlFor="borrower-employee">Funcionários</Label>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="thirdParty" id="borrower-third" />
-                            <Label htmlFor="borrower-third">Terceiros</Label>
-                          </div>
-                        </RadioGroup>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                {/* Campo condicional para seleção de funcionário */}
-                {borrowerType === "employee" && (
-                  <FormField
-                    control={printForm.control}
-                    name="employeeName"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-col">
-                        <FormLabel>Nome do Funcionário</FormLabel>
-                        <div className="relative">
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <FormControl>
-                                <Button
-                                  variant="outline"
-                                  role="combobox"
-                                  className={cn(
-                                    "w-full justify-between",
-                                    !field.value && "text-muted-foreground"
-                                  )}
-                                >
-                                  {field.value
-                                    ? field.value === "all" 
-                                      ? "Todos os funcionários" 
-                                      : field.value
-                                    : "Selecione um funcionário"}
-                                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                </Button>
-                              </FormControl>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-full p-0">
-                              <Command>
-                                <CommandInput 
-                                  placeholder="Buscar funcionário..." 
-                                  onValueChange={setEmployeeSearchValue}
-                                />
-                                <CommandEmpty>Nenhum funcionário encontrado.</CommandEmpty>
-                                <CommandGroup>
-                                  <CommandItem
-                                    key="all-employees"
-                                    value="all"
-                                    onSelect={() => {
-                                      printForm.setValue("employeeName", "all");
-                                      setEmployeeSearchValue("");
-                                      setShowEmployeeNotFound(false);
-                                    }}
-                                  >
-                                    <Check
-                                      className={cn(
-                                        "mr-2 h-4 w-4",
-                                        field.value === "all" ? "opacity-100" : "opacity-0"
-                                      )}
-                                    />
-                                    Todos os funcionários
-                                  </CommandItem>
-                                  {filterEmployees(employeeSearchValue).map((name) => (
-                                    <CommandItem
-                                      key={name}
-                                      value={name}
-                                      onSelect={() => {
-                                        printForm.setValue("employeeName", name);
-                                        setEmployeeSearchValue("");
-                                        setShowEmployeeNotFound(false);
-                                      }}
-                                    >
-                                      <Check
-                                        className={cn(
-                                          "mr-2 h-4 w-4",
-                                          name === field.value ? "opacity-100" : "opacity-0"
-                                        )}
-                                      />
-                                      {name}
-                                    </CommandItem>
-                                  ))}
-                                </CommandGroup>
-                              </Command>
-                            </PopoverContent>
-                          </Popover>
-                        </div>
-                        {showEmployeeNotFound && borrowerType === "employee" && (
-                          <p className="text-sm font-medium text-destructive">
-                            Funcionário não encontrado na lista.
-                          </p>
-                        )}
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
-                
-                {/* Campo condicional para seleção de terceiros */}
-                {borrowerType === "thirdParty" && (
-                  <FormField
-                    control={printForm.control}
-                    name="thirdPartyName"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-col">
-                        <FormLabel>Nome do Terceiro</FormLabel>
-                        <div className="relative">
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <FormControl>
-                                <Button
-                                  variant="outline"
-                                  role="combobox"
-                                  className={cn(
-                                    "w-full justify-between",
-                                    !field.value && "text-muted-foreground"
-                                  )}
-                                >
-                                  {field.value
-                                    ? field.value === "all" 
-                                      ? "Todos os terceiros" 
-                                      : field.value
-                                    : "Selecione um terceiro"}
-                                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                </Button>
-                              </FormControl>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-full p-0">
-                              <Command>
-                                <CommandInput 
-                                  placeholder="Buscar terceiro..." 
-                                  onValueChange={setEmployeeSearchValue}
-                                />
-                                <CommandEmpty>Nenhum terceiro encontrado.</CommandEmpty>
-                                <CommandGroup>
-                                  <CommandItem
-                                    key="all-third-parties"
-                                    value="all"
-                                    onSelect={() => {
-                                      printForm.setValue("thirdPartyName", "all");
-                                      setEmployeeSearchValue("");
-                                      setShowEmployeeNotFound(false);
-                                    }}
-                                  >
-                                    <Check
-                                      className={cn(
-                                        "mr-2 h-4 w-4",
-                                        field.value === "all" ? "opacity-100" : "opacity-0"
-                                      )}
-                                    />
-                                    Todos os terceiros
-                                  </CommandItem>
-                                  {filterThirdParties(employeeSearchValue).map((name) => (
-                                    <CommandItem
-                                      key={name}
-                                      value={name}
-                                      onSelect={() => {
-                                        printForm.setValue("thirdPartyName", name);
-                                        setEmployeeSearchValue("");
-                                        setShowEmployeeNotFound(false);
-                                      }}
-                                    >
-                                      <Check
-                                        className={cn(
-                                          "mr-2 h-4 w-4",
-                                          name === field.value ? "opacity-100" : "opacity-0"
-                                        )}
-                                      />
-                                      {name}
-                                    </CommandItem>
-                                  ))}
-                                </CommandGroup>
-                              </Command>
-                            </PopoverContent>
-                          </Popover>
-                        </div>
-                        {showEmployeeNotFound && borrowerType === "thirdParty" && (
-                          <p className="text-sm font-medium text-destructive">
-                            Terceiro não encontrado na lista.
-                          </p>
-                        )}
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
-                
-                <FormField
-                  control={printForm.control}
-                  name="loanStatus"
-                  render={({ field }) => (
-                    <FormItem className="space-y-3">
-                      <FormLabel>Status dos Empréstimos</FormLabel>
-                      <FormControl>
-                        <RadioGroup
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
-                          value={field.value}
-                          className="flex flex-col space-y-1"
-                        >
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="all" id="all" />
-                            <Label htmlFor="all">Todos</Label>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="active" id="active" />
-                            <Label htmlFor="active">Em uso</Label>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="returned" id="returned" />
-                            <Label htmlFor="returned">Devolvidos</Label>
-                          </div>
-                        </RadioGroup>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <FormField
-                  control={printForm.control}
-                  name="printerType"
-                  render={({ field }) => (
-                    <FormItem className="space-y-3">
-                      <FormLabel>Tipo de Impressora</FormLabel>
-                      <FormControl>
-                        <RadioGroup
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
-                          value={field.value}
-                          className="flex flex-col space-y-1"
-                        >
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="receipt" id="receipt" />
-                            <Label htmlFor="receipt">Impressora de Cupom</Label>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="normal" id="normal" />
-                            <Label htmlFor="normal">Impressora Normal</Label>
-                          </div>
-                        </RadioGroup>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <DialogFooter>
-                  <DialogClose asChild>
-                    <Button variant="outline" type="button">Cancelar</Button>
-                  </DialogClose>
-                  <Button type="submit">Imprimir</Button>
-                </DialogFooter>
-              </form>
-            </Form>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      <Card ref={printRef}>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <CalendarDays className="h-5 w-5" />
-            Registro Histórico de Empréstimos
-          </CardTitle>
-          <CardDescription>
-            {date?.from && date?.to
-              ? `Relatório de ${formatDate(date.from)} até ${formatDate(date.to)}`
-              : "Todos os registros"}
-            {employeeFilter !== "all" && ` - Filtrado por: ${employeeFilter}`}
-            {reportType !== "all" && ` - Status: ${reportType === "active" ? "Em uso" : "Devolvidos"}`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {filteredLoans.length > 0 ? (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Ferramenta</TableHead>
-                    <TableHead>Responsável</TableHead>
-                    <TableHead>Saída</TableHead>
-                    <TableHead>Devolução Prevista</TableHead>
-                    <TableHead>Devolução Real</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredLoans.map((loan) => (
-                    <TableRow key={loan.id}>
-                      <TableCell>{loan.toolName}</TableCell>
-                      <TableCell>
-                        {loan.borrower}
-                        {!loan.isThirdParty && loan.role && (
-                          <div className="text-xs text-muted-foreground">
-                            {loan.role}
-                          </div>
-                        )}
-                        {loan.isThirdParty && (
-                          <div className="text-xs text-muted-foreground">
-                            Terceiro
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell>{formatDate(loan.borrowDate, true)}</TableCell>
-                      <TableCell>
-                        {loan.isThirdParty && loan.expectedReturnDate ? formatDate(loan.expectedReturnDate, true) : "-"}
-                      </TableCell>
-                      <TableCell>
-                        {loan.returnDate ? formatDate(loan.returnDate, true) : "-"}
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
-                            loan.status === "active"
-                              ? loan.isThirdParty && loan.expectedReturnDate && loan.expectedReturnDate < new Date()
-                                ? "bg-red-100 text-red-800"
-                                : "bg-blue-100 text-blue-800"
-                              : "bg-green-100 text-green-800"
-                          }`}
-                        >
-                          {loan.status === "active"
-                            ? loan.isThirdParty && loan.expectedReturnDate && loan.expectedReturnDate < new Date()
-                              ? "Atrasado"
-                              : "Em uso"
-                            : "Devolvido"}
-                        </span>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              Nenhum empréstimo encontrado para os critérios selecionados.
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        <TabsContent value="thirdParties">
+          {companyViewOpen ? renderCompanyEmployees() : renderThirdPartyCompaniesList()}
+        </TabsContent>
+      </Tabs>
 
       {/* Dialog para adicionar terceiros */}
       <Dialog open={thirdPartyDialogOpen} onOpenChange={(open) => {
@@ -1289,6 +1433,63 @@ const Reports = () => {
           </Form>
         </DialogContent>
       </Dialog>
+      
+      {/* Dialog para adicionar funcionário à empresa */}
+      <Dialog open={addEmployeeDialogOpen} onOpenChange={setAddEmployeeDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Adicionar Funcionário</DialogTitle>
+            <DialogDescription>
+              Adicione um novo funcionário à empresa {selectedCompany?.companyName}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <Form {...thirdPartyEmployeeForm}>
+            <form onSubmit={thirdPartyEmployeeForm.handleSubmit(handleAddEmployeeToCompany)} className="space-y-4">
+              <FormField
+                control={thirdPartyEmployeeForm.control}
+                name="employeeName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nome do Funcionário</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Digite o nome do funcionário" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={thirdPartyEmployeeForm.control}
+                name="role"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Função na Empresa</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Digite a função do funcionário" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <DialogFooter>
+                <Button 
+                  variant="outline" 
+                  type="button" 
+                  onClick={() => setAddEmployeeDialogOpen(false)}
+                >
+                  Cancelar
+                </Button>
+                <Button type="submit">
+                  Adicionar
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog de confirmação para excluir terceiro */}
       <AlertDialog open={thirdPartyAlertOpen} onOpenChange={setThirdPartyAlertOpen}>
@@ -1308,7 +1509,6 @@ const Reports = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
     </div>
   );
 };

@@ -42,18 +42,15 @@ const CommandInput = React.forwardRef<
     onValueChange?: (value: string) => void
   }
 >(({ className, onValueChange, ...props }, ref) => {
-  // Handle the onValueChange callback separately from native onChange
+  // Handle the onValueChange callback separately
   const handleChange = React.useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       if (onValueChange) {
         onValueChange(e.target.value);
       }
-      // The original onChange from props will still be called if provided
-      if (props.onChange) {
-        props.onChange(e);
-      }
+      // We don't need to handle props.onChange since it doesn't exist in the CommandPrimitive.Input props
     },
-    [onValueChange, props.onChange]
+    [onValueChange]
   );
 
   return (
