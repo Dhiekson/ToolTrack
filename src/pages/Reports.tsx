@@ -1,5 +1,4 @@
-
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -138,7 +137,7 @@ const Reports = () => {
   const borrowerType = printForm.watch("borrowerType");
 
   // Reset dependant fields when borrowerType changes
-  React.useEffect(() => {
+  useEffect(() => {
     if (borrowerType === "all") {
       printForm.setValue("employeeName", "");
       printForm.setValue("thirdPartyName", "");
@@ -150,7 +149,7 @@ const Reports = () => {
   }, [borrowerType, printForm]);
 
   // Set editingThirdParty values when it changes
-  React.useEffect(() => {
+  useEffect(() => {
     if (editingThirdParty) {
       thirdPartyForm.setValue("companyName", editingThirdParty.companyName);
       thirdPartyForm.setValue("employeeName", editingThirdParty.employeeName);
@@ -775,7 +774,6 @@ const Reports = () => {
                 <Command>
                   <CommandInput 
                     placeholder="Buscar funcionário..." 
-                    value={employeeSearchValue}
                     onValueChange={setEmployeeSearchValue}
                   />
                   <CommandEmpty>Nenhum funcionário encontrado.</CommandEmpty>
@@ -911,7 +909,7 @@ const Reports = () => {
                               <Command>
                                 <CommandInput 
                                   placeholder="Buscar funcionário..." 
-                                  onChange={(e) => setEmployeeSearchValue(e.target.value)}
+                                  onValueChange={setEmployeeSearchValue}
                                 />
                                 <CommandEmpty>Nenhum funcionário encontrado.</CommandEmpty>
                                 <CommandGroup>
@@ -999,7 +997,7 @@ const Reports = () => {
                               <Command>
                                 <CommandInput 
                                   placeholder="Buscar terceiro..." 
-                                  onChange={(e) => setEmployeeSearchValue(e.target.value)}
+                                  onValueChange={setEmployeeSearchValue}
                                 />
                                 <CommandEmpty>Nenhum terceiro encontrado.</CommandEmpty>
                                 <CommandGroup>
