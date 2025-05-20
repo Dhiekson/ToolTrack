@@ -779,6 +779,7 @@ const Reports = () => {
                   <CommandEmpty>Nenhum funcionário encontrado.</CommandEmpty>
                   <CommandGroup>
                     <CommandItem
+                      key="all"
                       value="all"
                       onSelect={() => {
                         setEmployeeFilter("all");
@@ -914,6 +915,7 @@ const Reports = () => {
                                 <CommandEmpty>Nenhum funcionário encontrado.</CommandEmpty>
                                 <CommandGroup>
                                   <CommandItem
+                                    key="all-employees"
                                     value="all"
                                     onSelect={() => {
                                       printForm.setValue("employeeName", "all");
@@ -1002,6 +1004,7 @@ const Reports = () => {
                                 <CommandEmpty>Nenhum terceiro encontrado.</CommandEmpty>
                                 <CommandGroup>
                                   <CommandItem
+                                    key="all-third-parties"
                                     value="all"
                                     onSelect={() => {
                                       printForm.setValue("thirdPartyName", "all");
