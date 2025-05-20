@@ -20,11 +20,10 @@ import {
 } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { jsPDF } from "jspdf";
+import autoTable from 'jspdf-autotable';
 import { format } from "date-fns";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-// Required import for jsPDF-AutoTable
-import 'jspdf-autotable';
 import {
   Dialog,
   DialogContent,
@@ -41,6 +40,10 @@ import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Check, ChevronsUpDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 // Extend jsPDF type to include autoTable method
 declare module 'jspdf' {
@@ -55,7 +58,8 @@ declare module 'jspdf' {
 // Schema for print dialog form
 const printFormSchema = z.object({
   employeeName: z.string().optional(),
-  loanStatus: z.enum(["all", "active", "returned"])
+  loanStatus: z.enum(["all", "active", "returned"]),
+  printerType: z.enum(["receipt", "normal"])
 });
 
 type PrintFormValues = z.infer<typeof printFormSchema>;
@@ -69,6 +73,7 @@ const Reports = () => {
   });
   const [reportType, setReportType] = useState<string>("all");
   const [employeeFilter, setEmployeeFilter] = useState<string>("all");
+  const [openEmployeeSelect, setOpenEmployeeSelect] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   
@@ -77,7 +82,8 @@ const Reports = () => {
     resolver: zodResolver(printFormSchema),
     defaultValues: {
       employeeName: "",
-      loanStatus: "all"
+      loanStatus: "all",
+      printerType: "receipt"
     }
   });
 
@@ -162,7 +168,7 @@ const Reports = () => {
       ]);
       
       // Generate the table using the autoTable function from jspdf-autotable
-      doc.autoTable({
+      autoTable(doc, {
         startY: yPos + 5,
         head: [["Ferramenta", "Responsável", "Função", "Saída", "Devolução Prevista", "Devolução Real", "Status"]],
         body: tableData,
@@ -188,59 +194,110 @@ const Reports = () => {
       // Aplicar filtros baseados nos valores do formulário
       const employeeFilterValue = values.employeeName || "all";
       const statusFilterValue = values.loanStatus;
+      const isPrinterReceipt = values.printerType === "receipt";
       
-      // Configurar estilo de impressão para cupom
+      // Configurar estilo de impressão
       const originalTitle = document.title;
       document.title = `Relatório - ${new Date().toLocaleDateString()}`;
       
-      // Adicionar estilos para impressão de cupom
+      // Adicionar estilos para impressão
       const style = document.createElement('style');
-      style.innerHTML = `
-        @media print {
-          body * {
-            visibility: hidden;
-            margin: 0;
-            padding: 0;
+      
+      if (isPrinterReceipt) {
+        // Estilo para impressora de cupom
+        style.innerHTML = `
+          @media print {
+            body * {
+              visibility: hidden;
+              margin: 0;
+              padding: 0;
+            }
+            .print-container, .print-container * {
+              visibility: visible;
+            }
+            .print-container {
+              position: absolute;
+              left: 0;
+              top: 0;
+              width: 80mm; /* Largura padrão para impressora de cupom */
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              font-size: 10px;
+            }
+            th, td {
+              padding: 3px;
+              border-bottom: 1px dashed #ddd;
+            }
+            .print-header {
+              text-align: center;
+              margin-bottom: 10px;
+              border-bottom: 1px dashed black;
+              padding-bottom: 8px;
+            }
+            .print-title {
+              font-size: 14px;
+              font-weight: bold;
+              margin: 0;
+            }
+            .print-subtitle {
+              font-size: 10px;
+              margin: 4px 0;
+            }
+            .print-info {
+              font-size: 9px;
+              margin: 2px 0;
+            }
           }
-          .print-container, .print-container * {
-            visibility: visible;
+        `;
+      } else {
+        // Estilo para impressora normal
+        style.innerHTML = `
+          @media print {
+            body * {
+              visibility: hidden;
+            }
+            .print-container, .print-container * {
+              visibility: visible;
+            }
+            .print-container {
+              position: absolute;
+              left: 0;
+              top: 0;
+              width: 100%;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+            }
+            th, td {
+              padding: 8px;
+              border-bottom: 1px solid #ddd;
+            }
+            .print-header {
+              text-align: center;
+              margin-bottom: 20px;
+              padding-bottom: 15px;
+              border-bottom: 2px solid black;
+            }
+            .print-title {
+              font-size: 18px;
+              font-weight: bold;
+              margin: 0;
+            }
+            .print-subtitle {
+              font-size: 14px;
+              margin: 8px 0;
+            }
+            .print-info {
+              font-size: 12px;
+              margin: 4px 0;
+            }
           }
-          .print-container {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 80mm; /* Largura padrão para impressora de cupom */
-          }
-          table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 10px;
-          }
-          th, td {
-            padding: 3px;
-            border-bottom: 1px dashed #ddd;
-          }
-          .print-header {
-            text-align: center;
-            margin-bottom: 10px;
-            border-bottom: 1px dashed black;
-            padding-bottom: 8px;
-          }
-          .print-title {
-            font-size: 14px;
-            font-weight: bold;
-            margin: 0;
-          }
-          .print-subtitle {
-            font-size: 10px;
-            margin: 4px 0;
-          }
-          .print-info {
-            font-size: 9px;
-            margin: 2px 0;
-          }
-        }
-      `;
+        `;
+      }
+      
       document.head.appendChild(style);
       
       // Filtrar os empréstimos conforme as opções selecionadas
@@ -290,6 +347,11 @@ const Reports = () => {
         statusFilterValue === "returned" ? "Devolvidos" : "Todos"
       }`;
       header.appendChild(statusInfo);
+      
+      const printerInfo = document.createElement('p');
+      printerInfo.classList.add('print-info');
+      printerInfo.textContent = `Impressora: ${isPrinterReceipt ? "Cupom" : "Normal"}`;
+      header.appendChild(printerInfo);
       
       printContainer.appendChild(header);
       
@@ -417,16 +479,60 @@ const Reports = () => {
           
           <div className="pt-4">
             <label className="block text-sm font-medium mb-2">Busca por Funcionário</label>
-            <div className="relative">
-              <Search className="absolute left-2 top-3 h-4 w-4 text-gray-400" />
-              <Input
-                type="text"
-                placeholder="Filtrar por nome do funcionário"
-                value={employeeFilter === "all" ? "" : employeeFilter} 
-                onChange={(e) => setEmployeeFilter(e.target.value || "all")}
-                className="pl-8 w-full"
-              />
-            </div>
+            <Popover open={openEmployeeSelect} onOpenChange={setOpenEmployeeSelect}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={openEmployeeSelect}
+                  className="w-full justify-between"
+                >
+                  {employeeFilter === "all" ? "Todos os funcionários" : employeeFilter}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-full p-0">
+                <Command>
+                  <CommandInput placeholder="Buscar funcionário..." />
+                  <CommandEmpty>Nenhum funcionário encontrado.</CommandEmpty>
+                  <CommandGroup>
+                    <CommandItem
+                      value="all"
+                      onSelect={() => {
+                        setEmployeeFilter("all");
+                        setOpenEmployeeSelect(false);
+                      }}
+                    >
+                      <Check
+                        className={cn(
+                          "mr-2 h-4 w-4",
+                          employeeFilter === "all" ? "opacity-100" : "opacity-0"
+                        )}
+                      />
+                      Todos os funcionários
+                    </CommandItem>
+                    {uniqueBorrowers.map((name) => (
+                      <CommandItem
+                        key={name}
+                        value={name}
+                        onSelect={() => {
+                          setEmployeeFilter(name);
+                          setOpenEmployeeSelect(false);
+                        }}
+                      >
+                        <Check
+                          className={cn(
+                            "mr-2 h-4 w-4",
+                            employeeFilter === name ? "opacity-100" : "opacity-0"
+                          )}
+                        />
+                        {name}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
         </CardContent>
       </Card>
@@ -458,14 +564,56 @@ const Reports = () => {
                   control={printForm.control}
                   name="employeeName"
                   render={({ field }) => (
-                    <FormItem>
+                    <FormItem className="flex flex-col">
                       <FormLabel>Nome do Funcionário</FormLabel>
-                      <FormControl>
-                        <Input 
-                          placeholder="Digite o nome ou deixe em branco para todos" 
-                          {...field} 
-                        />
-                      </FormControl>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              className={cn(
+                                "w-full justify-between",
+                                !field.value && "text-muted-foreground"
+                              )}
+                            >
+                              {field.value
+                                ? uniqueBorrowers.find(
+                                    (name) => name === field.value
+                                  )
+                                : "Selecione um funcionário"}
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-full p-0">
+                          <Command>
+                            <CommandInput placeholder="Buscar funcionário..." />
+                            <CommandEmpty>Nenhum funcionário encontrado.</CommandEmpty>
+                            <CommandGroup>
+                              {uniqueBorrowers.map((name) => (
+                                <CommandItem
+                                  value={name}
+                                  key={name}
+                                  onSelect={() => {
+                                    printForm.setValue("employeeName", name);
+                                  }}
+                                >
+                                  <Check
+                                    className={cn(
+                                      "mr-2 h-4 w-4",
+                                      name === field.value
+                                        ? "opacity-100"
+                                        : "opacity-0"
+                                    )}
+                                  />
+                                  {name}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                     </FormItem>
                   )}
                 />
@@ -493,6 +641,32 @@ const Reports = () => {
                           <div className="flex items-center space-x-2">
                             <RadioGroupItem value="returned" id="returned" />
                             <Label htmlFor="returned">Devolvidos</Label>
+                          </div>
+                        </RadioGroup>
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={printForm.control}
+                  name="printerType"
+                  render={({ field }) => (
+                    <FormItem className="space-y-3">
+                      <FormLabel>Tipo de Impressora</FormLabel>
+                      <FormControl>
+                        <RadioGroup
+                          onValueChange={field.onChange}
+                          defaultValue={field.value}
+                          className="flex flex-col space-y-1"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="receipt" id="receipt" />
+                            <Label htmlFor="receipt">Impressora de Cupom</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="normal" id="normal" />
+                            <Label htmlFor="normal">Impressora Normal</Label>
                           </div>
                         </RadioGroup>
                       </FormControl>

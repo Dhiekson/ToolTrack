@@ -22,6 +22,11 @@ const Tools = () => {
   const navigate = useNavigate();
   const { tools, addTool, updateTool, deleteTool } = useTools();
 
+  // Ordenar as ferramentas em ordem alfabética
+  const sortedTools = [...tools].sort((a, b) => 
+    a.name.localeCompare(b.name, 'pt-BR')
+  );
+
   const handleAddTool = (tool: Omit<Tool, "id">) => {
     addTool(tool);
     toast({
@@ -82,7 +87,7 @@ const Tools = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <ToolsList tools={tools} onDelete={handleDeleteTool} onUpdate={handleUpdateTool} />
+              <ToolsList tools={sortedTools} onDelete={handleDeleteTool} onUpdate={handleUpdateTool} />
             </CardContent>
           </Card>
         </TabsContent>
