@@ -1,3 +1,4 @@
+
 import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -22,8 +23,24 @@ import { jsPDF } from "jspdf";
 import { format } from "date-fns";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-// Need to include jspdf-autotable as a side effect to add autoTable method to jsPDF
-import "jspdf-autotable";
+// Required import for jsPDF-AutoTable
+import 'jspdf-autotable';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogClose
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 
 // Extend jsPDF type to include autoTable method
 declare module 'jspdf' {
@@ -35,6 +52,14 @@ declare module 'jspdf' {
   }
 }
 
+// Schema for print dialog form
+const printFormSchema = z.object({
+  employeeName: z.string().optional(),
+  loanStatus: z.enum(["all", "active", "returned"])
+});
+
+type PrintFormValues = z.infer<typeof printFormSchema>;
+
 const Reports = () => {
   const navigate = useNavigate();
   const { loans, employees } = useTools();
@@ -45,6 +70,16 @@ const Reports = () => {
   const [reportType, setReportType] = useState<string>("all");
   const [employeeFilter, setEmployeeFilter] = useState<string>("all");
   const printRef = useRef<HTMLDivElement>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  
+  // Form for print dialog
+  const printForm = useForm<PrintFormValues>({
+    resolver: zodResolver(printFormSchema),
+    defaultValues: {
+      employeeName: "",
+      loanStatus: "all"
+    }
+  });
 
   // Ordenar funcionários por ordem alfabética
   const sortedEmployees = [...employees].sort((a, b) => 
@@ -126,7 +161,7 @@ const Reports = () => {
           : "Devolvido"
       ]);
       
-      // Generate the table
+      // Generate the table using the autoTable function from jspdf-autotable
       doc.autoTable({
         startY: yPos + 5,
         head: [["Ferramenta", "Responsável", "Função", "Saída", "Devolução Prevista", "Devolução Real", "Status"]],
@@ -147,10 +182,153 @@ const Reports = () => {
     }
   };
   
-  // Função para imprimir a página
-  const handlePrint = () => {
+  // Função para imprimir com opções personalizadas
+  const handlePrintWithOptions = (values: PrintFormValues) => {
     try {
+      // Aplicar filtros baseados nos valores do formulário
+      const employeeFilterValue = values.employeeName || "all";
+      const statusFilterValue = values.loanStatus;
+      
+      // Configurar estilo de impressão para cupom
+      const originalTitle = document.title;
+      document.title = `Relatório - ${new Date().toLocaleDateString()}`;
+      
+      // Adicionar estilos para impressão de cupom
+      const style = document.createElement('style');
+      style.innerHTML = `
+        @media print {
+          body * {
+            visibility: hidden;
+            margin: 0;
+            padding: 0;
+          }
+          .print-container, .print-container * {
+            visibility: visible;
+          }
+          .print-container {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 80mm; /* Largura padrão para impressora de cupom */
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+          }
+          th, td {
+            padding: 3px;
+            border-bottom: 1px dashed #ddd;
+          }
+          .print-header {
+            text-align: center;
+            margin-bottom: 10px;
+            border-bottom: 1px dashed black;
+            padding-bottom: 8px;
+          }
+          .print-title {
+            font-size: 14px;
+            font-weight: bold;
+            margin: 0;
+          }
+          .print-subtitle {
+            font-size: 10px;
+            margin: 4px 0;
+          }
+          .print-info {
+            font-size: 9px;
+            margin: 2px 0;
+          }
+        }
+      `;
+      document.head.appendChild(style);
+      
+      // Filtrar os empréstimos conforme as opções selecionadas
+      const printLoans = loans.filter(loan => {
+        const matchesEmployee = employeeFilterValue === "all" || 
+          loan.borrower.toLowerCase().includes(employeeFilterValue.toLowerCase());
+        
+        if (!matchesEmployee) return false;
+        
+        // Aplicar filtro de status
+        if (statusFilterValue === "active") return loan.status === "active";
+        if (statusFilterValue === "returned") return loan.status === "returned";
+        
+        return true;
+      }).sort((a, b) => a.toolName.localeCompare(b.toolName, 'pt-BR'));
+      
+      // Criar contêiner temporário para impressão
+      const printContainer = document.createElement('div');
+      printContainer.classList.add('print-container');
+      
+      // Adicionar cabeçalho
+      const header = document.createElement('div');
+      header.classList.add('print-header');
+      
+      const title = document.createElement('p');
+      title.classList.add('print-title');
+      title.textContent = 'Relatório de Empréstimos';
+      header.appendChild(title);
+      
+      const subtitle = document.createElement('p');
+      subtitle.classList.add('print-subtitle');
+      subtitle.textContent = format(new Date(), "dd/MM/yyyy HH:mm");
+      header.appendChild(subtitle);
+      
+      // Adicionar informações de filtro
+      if (employeeFilterValue !== "all") {
+        const empInfo = document.createElement('p');
+        empInfo.classList.add('print-info');
+        empInfo.textContent = `Funcionário: ${employeeFilterValue}`;
+        header.appendChild(empInfo);
+      }
+      
+      const statusInfo = document.createElement('p');
+      statusInfo.classList.add('print-info');
+      statusInfo.textContent = `Status: ${
+        statusFilterValue === "active" ? "Em uso" : 
+        statusFilterValue === "returned" ? "Devolvidos" : "Todos"
+      }`;
+      header.appendChild(statusInfo);
+      
+      printContainer.appendChild(header);
+      
+      // Criar tabela para impressão
+      const table = document.createElement('table');
+      table.innerHTML = `
+        <thead>
+          <tr>
+            <th>Ferramenta</th>
+            <th>Responsável</th>
+            <th>Saída</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${printLoans.map(loan => `
+            <tr>
+              <td>${loan.toolName}</td>
+              <td>${loan.borrower}</td>
+              <td>${formatDate(loan.borrowDate, false)}</td>
+              <td>${loan.status === "active" ? "Em uso" : "Devolvido"}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      `;
+      
+      printContainer.appendChild(table);
+      document.body.appendChild(printContainer);
+      
+      // Imprimir e limpar
       window.print();
+      
+      document.body.removeChild(printContainer);
+      document.head.removeChild(style);
+      document.title = originalTitle;
+      
+      // Fechar o diálogo após imprimir
+      setDialogOpen(false);
+      
       toast.success("Comando de impressão enviado");
     } catch (error) {
       console.error("Erro ao imprimir:", error);
@@ -210,7 +388,7 @@ const Reports = () => {
           <CardDescription>Selecione o período e tipo de relatório desejado</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium mb-2">Período</label>
               <DateRangePicker 
@@ -235,38 +413,19 @@ const Reports = () => {
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">Funcionário</label>
-              <Select
-                value={employeeFilter}
-                onValueChange={setEmployeeFilter}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Todos os funcionários" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os funcionários</SelectItem>
-                  {uniqueBorrowers.map(borrower => (
-                    <SelectItem key={borrower} value={borrower}>{borrower}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
           </div>
           
-          <div className="pt-4 flex justify-center gap-4 flex-wrap">
-            <div className="w-full md:w-auto">
-              <label className="block text-sm font-medium mb-2">Busca por Funcionário</label>
-              <div className="relative">
-                <Search className="absolute left-2 top-3 h-4 w-4 text-gray-400" />
-                <Input
-                  type="text"
-                  placeholder="Filtrar por nome do funcionário"
-                  value={employeeFilter === "all" ? "" : employeeFilter} 
-                  onChange={(e) => setEmployeeFilter(e.target.value || "all")}
-                  className="pl-8 w-full"
-                />
-              </div>
+          <div className="pt-4">
+            <label className="block text-sm font-medium mb-2">Busca por Funcionário</label>
+            <div className="relative">
+              <Search className="absolute left-2 top-3 h-4 w-4 text-gray-400" />
+              <Input
+                type="text"
+                placeholder="Filtrar por nome do funcionário"
+                value={employeeFilter === "all" ? "" : employeeFilter} 
+                onChange={(e) => setEmployeeFilter(e.target.value || "all")}
+                className="pl-8 w-full"
+              />
             </div>
           </div>
         </CardContent>
@@ -277,10 +436,80 @@ const Reports = () => {
           <Download className="mr-2 h-4 w-4" />
           Gerar PDF
         </Button>
-        <Button onClick={handlePrint} className="flex-grow md:flex-grow-0">
-          <Printer className="mr-2 h-4 w-4" />
-          Imprimir
-        </Button>
+        
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>
+            <Button className="flex-grow md:flex-grow-0">
+              <Printer className="mr-2 h-4 w-4" />
+              Imprimir
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Opções de Impressão</DialogTitle>
+              <DialogDescription>
+                Selecione os filtros para o relatório que deseja imprimir
+              </DialogDescription>
+            </DialogHeader>
+            
+            <Form {...printForm}>
+              <form onSubmit={printForm.handleSubmit(handlePrintWithOptions)} className="space-y-4">
+                <FormField
+                  control={printForm.control}
+                  name="employeeName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nome do Funcionário</FormLabel>
+                      <FormControl>
+                        <Input 
+                          placeholder="Digite o nome ou deixe em branco para todos" 
+                          {...field} 
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={printForm.control}
+                  name="loanStatus"
+                  render={({ field }) => (
+                    <FormItem className="space-y-3">
+                      <FormLabel>Status dos Empréstimos</FormLabel>
+                      <FormControl>
+                        <RadioGroup
+                          onValueChange={field.onChange}
+                          defaultValue={field.value}
+                          className="flex flex-col space-y-1"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="all" id="all" />
+                            <Label htmlFor="all">Todos</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="active" id="active" />
+                            <Label htmlFor="active">Em uso</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="returned" id="returned" />
+                            <Label htmlFor="returned">Devolvidos</Label>
+                          </div>
+                        </RadioGroup>
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                
+                <DialogFooter>
+                  <DialogClose asChild>
+                    <Button variant="outline">Cancelar</Button>
+                  </DialogClose>
+                  <Button type="submit">Imprimir</Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <Card ref={printRef}>
