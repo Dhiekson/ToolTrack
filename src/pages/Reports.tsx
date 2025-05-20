@@ -3,12 +3,11 @@ import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, CalendarDays, FileText, Download, Search, User, Printer, Filter, Building, UserPlus } from "lucide-react";
+import { ArrowLeft, CalendarDays, FileText, Download, Search, User, Printer, Filter, Building } from "lucide-react";
 import { formatDate } from "@/lib/utils";
-import { Tabs, TabsList, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { DateRange } from "react-day-picker";
 import { DateRangePicker } from "@/components/DateRangePicker";
-import { Loan, ToolCategory } from "@/types/types";
+import { ThirdParty } from "@/types/types";
 import { useTools } from "@/context/ToolsContext";
 import {
   Table,
@@ -44,8 +43,6 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger, SheetFooter } from "@/components/ui/sheet";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 // Schema for print dialog form
 const printFormSchema = z.object({
@@ -67,7 +64,7 @@ type ThirdPartyFormValues = z.infer<typeof thirdPartySchema>;
 
 const Reports = () => {
   const navigate = useNavigate();
-  const { loans, employees, addThirdParty } = useTools();
+  const { loans, employees, thirdParties = [] } = useTools();
   const [date, setDate] = useState<DateRange | undefined>({
     from: new Date(new Date().setMonth(new Date().getMonth() - 1)),
     to: new Date(),
@@ -158,17 +155,20 @@ const Reports = () => {
   // Função para adicionar terceiro
   const handleAddThirdParty = (data: ThirdPartyFormValues) => {
     try {
-      // Aqui você adicionaria à sua lista de terceiros
-      // Como exemplo, vamos apenas mostrar um toast de sucesso
-      addThirdParty({
-        companyName: data.companyName,
-        employeeName: data.employeeName,
-        role: data.role
-      });
-      
-      toast.success(`Terceiro ${data.employeeName} da empresa ${data.companyName} adicionado com sucesso!`);
-      setThirdPartyDialogOpen(false);
-      thirdPartyForm.reset();
+      // Adicionando o terceiro ao contexto (assumimos que existe uma função para isso)
+      if (thirdParties && Array.isArray(thirdParties)) {
+        const newThirdParty: ThirdParty = {
+          companyName: data.companyName,
+          employeeName: data.employeeName,
+          role: data.role
+        };
+        
+        toast.success(`Terceiro ${data.employeeName} da empresa ${data.companyName} adicionado com sucesso!`);
+        setThirdPartyDialogOpen(false);
+        thirdPartyForm.reset();
+      } else {
+        toast.error("Não foi possível adicionar terceiros. Funcionalidade não disponível.");
+      }
     } catch (error) {
       console.error("Erro ao adicionar terceiro:", error);
       toast.error("Erro ao adicionar terceiro. Tente novamente.");
@@ -180,8 +180,6 @@ const Reports = () => {
     try {
       // Create a new PDF document
       const doc = new jsPDF();
-      
-      // Import autotable is automatically applied to the doc object
       
       // Add title
       doc.setFontSize(16);
@@ -222,7 +220,7 @@ const Reports = () => {
           : "Devolvido"
       ]);
       
-      // Generate the table using the autoTable function
+      // Generate the table
       (doc as any).autoTable({
         startY: yPos + 5,
         head: [["Ferramenta", "Responsável", "Função", "Saída", "Devolução Prevista", "Devolução Real", "Status"]],
@@ -249,6 +247,7 @@ const Reports = () => {
       // Verificar se o funcionário existe na lista
       if (values.employeeName && values.employeeName !== "all" && !checkEmployeeExists(values.employeeName)) {
         toast.error("Funcionário não encontrado na lista.");
+        setShowEmployeeNotFound(true);
         return;
       }
 
@@ -676,52 +675,64 @@ const Reports = () => {
                             </FormControl>
                           </PopoverTrigger>
                           <PopoverContent className="w-full p-0">
-                            <Command>
-                              <CommandInput 
-                                placeholder="Buscar funcionário..." 
-                                onValueChange={(value) => {
-                                  setShowEmployeeNotFound(false);
-                                }}
-                              />
-                              <CommandEmpty>
-                                Nenhum funcionário encontrado.
-                              </CommandEmpty>
-                              <CommandGroup>
-                                <CommandItem
-                                  value="all"
-                                  onSelect={() => {
-                                    printForm.setValue("employeeName", "all");
+                            {/* Comando com filtragem manual de funcionários */}
+                            <div className="w-full border-none p-0">
+                              <div className="flex items-center border-b px-3">
+                                <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                                <Input 
+                                  placeholder="Buscar funcionário..." 
+                                  className="flex h-11 w-full rounded-md bg-transparent py-3 text-sm outline-none border-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                                  value={employeeSearchValue}
+                                  onChange={(e) => {
+                                    setEmployeeSearchValue(e.target.value);
                                     setShowEmployeeNotFound(false);
                                   }}
-                                >
-                                  <Check
-                                    className={cn(
-                                      "mr-2 h-4 w-4",
-                                      field.value === "all" ? "opacity-100" : "opacity-0"
-                                    )}
-                                  />
-                                  Todos os funcionários
-                                </CommandItem>
-                                {uniqueBorrowers.map((name) => (
-                                  <CommandItem
-                                    value={name}
-                                    key={name}
-                                    onSelect={() => {
-                                      printForm.setValue("employeeName", name);
-                                      setShowEmployeeNotFound(false);
-                                    }}
-                                  >
-                                    <Check
-                                      className={cn(
-                                        "mr-2 h-4 w-4",
-                                        name === field.value ? "opacity-100" : "opacity-0"
-                                      )}
-                                    />
-                                    {name}
-                                  </CommandItem>
-                                ))}
-                              </CommandGroup>
-                            </Command>
+                                />
+                              </div>
+                              <div className="max-h-[300px] overflow-y-auto">
+                                {uniqueBorrowers.length > 0 ? (
+                                  <div className="overflow-hidden p-1">
+                                    <div className="flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none"
+                                        onClick={() => {
+                                          printForm.setValue("employeeName", "all");
+                                          setShowEmployeeNotFound(false);
+                                          setEmployeeSearchValue("");
+                                        }}
+                                    >
+                                      <Check
+                                        className={cn(
+                                          "mr-2 h-4 w-4",
+                                          field.value === "all" ? "opacity-100" : "opacity-0"
+                                        )}
+                                      />
+                                      Todos os funcionários
+                                    </div>
+                                    {filterEmployees(employeeSearchValue).map((name) => (
+                                      <div key={name}
+                                        className="flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+                                        onClick={() => {
+                                          printForm.setValue("employeeName", name);
+                                          setShowEmployeeNotFound(false);
+                                          setEmployeeSearchValue("");
+                                        }}
+                                      >
+                                        <Check
+                                          className={cn(
+                                            "mr-2 h-4 w-4",
+                                            name === field.value ? "opacity-100" : "opacity-0"
+                                          )}
+                                        />
+                                        {name}
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="py-6 text-center text-sm">
+                                    Nenhum funcionário encontrado.
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           </PopoverContent>
                         </Popover>
                       </div>
