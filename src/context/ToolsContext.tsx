@@ -1,6 +1,5 @@
-
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
-import { Tool, Loan, ToolCategory, Employee } from "@/types/types";
+import { Tool, Loan, ToolCategory, Employee, ThirdParty } from "@/types/types";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -8,9 +7,11 @@ interface ToolsContextType {
   tools: Tool[];
   loans: Loan[];
   employees: Employee[];
+  thirdParties: ThirdParty[];
   setTools: (tools: Tool[]) => void;
   setLoans: (loans: Loan[]) => void;
   setEmployees: (employees: Employee[]) => void;
+  setThirdParties: (thirdParties: ThirdParty[]) => void;
   addTool: (tool: Omit<Tool, "id">) => void;
   updateTool: (tool: Tool) => void;
   deleteTool: (id: string) => void;
@@ -19,6 +20,9 @@ interface ToolsContextType {
   addEmployee: (employee: Omit<Employee, "id">) => void;
   updateEmployee: (employee: Employee) => void;
   deleteEmployee: (id: string) => void;
+  addThirdParty: (thirdParty: ThirdParty) => void;
+  updateThirdParty: (thirdParty: ThirdParty) => void;
+  deleteThirdParty: (companyName: string, employeeName: string) => void;
   isLoading: boolean;
 }
 
@@ -28,6 +32,7 @@ export function ToolsProvider({ children }: { children: ReactNode }) {
   const [tools, setTools] = useState<Tool[]>([]);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [thirdParties, setThirdParties] = useState<ThirdParty[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Fetch initial data from Supabase
@@ -92,6 +97,12 @@ export function ToolsProvider({ children }: { children: ReactNode }) {
         }));
         
         setEmployees(mappedEmployees);
+        
+        // Fetch third parties from local storage (since we don't have a table for them yet)
+        const storedThirdParties = localStorage.getItem('thirdParties');
+        if (storedThirdParties) {
+          setThirdParties(JSON.parse(storedThirdParties));
+        }
       } catch (error) {
         console.error('Error fetching data:', error);
         toast.error('Erro ao carregar dados');
@@ -381,15 +392,85 @@ export function ToolsProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Third party management functions
+  const addThirdParty = (thirdParty: ThirdParty) => {
+    try {
+      const updatedThirdParties = [...thirdParties, thirdParty];
+      setThirdParties(updatedThirdParties);
+      
+      // Store in local storage
+      localStorage.setItem('thirdParties', JSON.stringify(updatedThirdParties));
+      
+      toast.success(`Terceiro ${thirdParty.employeeName} da empresa ${thirdParty.companyName} adicionado com sucesso!`);
+      return thirdParty;
+    } catch (error) {
+      console.error('Error adding third party:', error);
+      toast.error('Erro ao adicionar terceiro');
+      return null;
+    }
+  };
+
+  const updateThirdParty = (updatedThirdParty: ThirdParty) => {
+    try {
+      const updatedThirdParties = thirdParties.map(tp => 
+        (tp.companyName === updatedThirdParty.companyName && tp.employeeName === updatedThirdParty.employeeName) 
+          ? updatedThirdParty 
+          : tp
+      );
+      
+      setThirdParties(updatedThirdParties);
+      
+      // Store in local storage
+      localStorage.setItem('thirdParties', JSON.stringify(updatedThirdParties));
+      
+      toast.success(`Terceiro ${updatedThirdParty.employeeName} atualizado com sucesso!`);
+    } catch (error) {
+      console.error('Error updating third party:', error);
+      toast.error('Erro ao atualizar terceiro');
+    }
+  };
+
+  const deleteThirdParty = (companyName: string, employeeName: string) => {
+    try {
+      // Check for active loans
+      const hasActiveLoans = loans.some(
+        loan => loan.isThirdParty && 
+        loan.borrower === employeeName && 
+        loan.status === "active"
+      );
+      
+      if (hasActiveLoans) {
+        toast.error('Não é possível excluir um terceiro com empréstimos ativos');
+        return;
+      }
+      
+      const updatedThirdParties = thirdParties.filter(
+        tp => !(tp.companyName === companyName && tp.employeeName === employeeName)
+      );
+      
+      setThirdParties(updatedThirdParties);
+      
+      // Store in local storage
+      localStorage.setItem('thirdParties', JSON.stringify(updatedThirdParties));
+      
+      toast.success('Terceiro excluído com sucesso');
+    } catch (error) {
+      console.error('Error deleting third party:', error);
+      toast.error('Erro ao excluir terceiro');
+    }
+  };
+
   return (
     <ToolsContext.Provider
       value={{
         tools,
         loans,
         employees,
+        thirdParties,
         setTools,
         setLoans,
         setEmployees,
+        setThirdParties,
         addTool,
         updateTool,
         deleteTool,
@@ -398,6 +479,9 @@ export function ToolsProvider({ children }: { children: ReactNode }) {
         addEmployee,
         updateEmployee,
         deleteEmployee,
+        addThirdParty,
+        updateThirdParty,
+        deleteThirdParty,
         isLoading
       }}
     >

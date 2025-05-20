@@ -3,7 +3,7 @@ import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, CalendarDays, FileText, Download, Search, User, Printer, Filter, Building } from "lucide-react";
+import { ArrowLeft, CalendarDays, FileText, Download, Search, User, Printer, Filter, Building, Pencil, Trash2 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { DateRange } from "react-day-picker";
 import { DateRangePicker } from "@/components/DateRangePicker";
@@ -33,6 +33,16 @@ import {
   DialogTrigger,
   DialogClose
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -46,10 +56,30 @@ import { cn } from "@/lib/utils";
 
 // Schema for print dialog form
 const printFormSchema = z.object({
-  employeeName: z.string().min(1, "Selecione um funcionário").optional(),
-  loanStatus: z.enum(["all", "active", "returned"]),
-  printerType: z.enum(["receipt", "normal"]),
-  borrowerType: z.enum(["all", "employee", "thirdParty"])
+  borrowerType: z.enum(["all", "employee", "thirdParty"], {
+    required_error: "Selecione o tipo de responsável",
+  }),
+  employeeName: z.string().optional(),
+  thirdPartyName: z.string().optional(),
+  loanStatus: z.enum(["all", "active", "returned"], {
+    required_error: "Selecione o status dos empréstimos",
+  }),
+  printerType: z.enum(["receipt", "normal"], {
+    required_error: "Selecione o tipo de impressora",
+  })
+}).refine(data => {
+  // If borrowerType is employee, employeeName must be set
+  if (data.borrowerType === "employee" && !data.employeeName) {
+    return false;
+  }
+  // If borrowerType is thirdParty, thirdPartyName must be set
+  if (data.borrowerType === "thirdParty" && !data.thirdPartyName) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Selecione um responsável",
+  path: ["employeeName"]
 });
 
 // Schema for third-party company form
@@ -64,7 +94,7 @@ type ThirdPartyFormValues = z.infer<typeof thirdPartySchema>;
 
 const Reports = () => {
   const navigate = useNavigate();
-  const { loans, employees, thirdParties = [] } = useTools();
+  const { loans, employees, thirdParties = [], addThirdParty, updateThirdParty, deleteThirdParty } = useTools();
   const [date, setDate] = useState<DateRange | undefined>({
     from: new Date(new Date().setMonth(new Date().getMonth() - 1)),
     to: new Date(),
@@ -76,16 +106,21 @@ const Reports = () => {
   const [thirdPartyDialogOpen, setThirdPartyDialogOpen] = useState(false);
   const [employeeSearchValue, setEmployeeSearchValue] = useState("");
   const [showEmployeeNotFound, setShowEmployeeNotFound] = useState(false);
+  const [editingThirdParty, setEditingThirdParty] = useState<ThirdParty | null>(null);
+  const [thirdPartyToDelete, setThirdPartyToDelete] = useState<ThirdParty | null>(null);
+  const [thirdPartyAlertOpen, setThirdPartyAlertOpen] = useState(false);
+  const [thirdPartyList, setThirdPartyList] = useState<boolean>(false);
   const printRef = useRef<HTMLDivElement>(null);
   
   // Form for print dialog
   const printForm = useForm<PrintFormValues>({
     resolver: zodResolver(printFormSchema),
     defaultValues: {
+      borrowerType: "all",
       employeeName: "",
+      thirdPartyName: "",
       loanStatus: "all",
-      printerType: "receipt",
-      borrowerType: "all"
+      printerType: "receipt"
     }
   });
 
@@ -99,14 +134,56 @@ const Reports = () => {
     }
   });
 
+  // Watch borrowerType to update the form fields
+  const borrowerType = printForm.watch("borrowerType");
+
+  // Reset dependant fields when borrowerType changes
+  React.useEffect(() => {
+    if (borrowerType === "all") {
+      printForm.setValue("employeeName", "");
+      printForm.setValue("thirdPartyName", "");
+    } else if (borrowerType === "employee") {
+      printForm.setValue("thirdPartyName", "");
+    } else if (borrowerType === "thirdParty") {
+      printForm.setValue("employeeName", "");
+    }
+  }, [borrowerType, printForm]);
+
+  // Set editingThirdParty values when it changes
+  React.useEffect(() => {
+    if (editingThirdParty) {
+      thirdPartyForm.setValue("companyName", editingThirdParty.companyName);
+      thirdPartyForm.setValue("employeeName", editingThirdParty.employeeName);
+      thirdPartyForm.setValue("role", editingThirdParty.role);
+    } else {
+      thirdPartyForm.reset();
+    }
+  }, [editingThirdParty, thirdPartyForm]);
+
   // Ordenar funcionários por ordem alfabética
   const sortedEmployees = [...employees].sort((a, b) => 
     a.name.localeCompare(b.name, 'pt-BR')
   );
 
+  // Ordenar terceiros por ordem alfabética
+  const sortedThirdParties = [...(thirdParties || [])].sort((a, b) => 
+    a.companyName.localeCompare(b.companyName, 'pt-BR') || 
+    a.employeeName.localeCompare(b.employeeName, 'pt-BR')
+  );
+
   // Obter nomes únicos dos funcionários para o filtro, ordenados alfabeticamente
   const uniqueBorrowers = Array.from(new Set(loans.map(loan => loan.borrower)))
     .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+  // Obter nomes únicos de empréstimos não terceiros para filtro
+  const uniqueEmployeeBorrowers = Array.from(
+    new Set(loans.filter(loan => !loan.isThirdParty).map(loan => loan.borrower))
+  ).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+  // Obter nomes únicos de empréstimos terceiros para filtro
+  const uniqueThirdPartyBorrowers = Array.from(
+    new Set(loans.filter(loan => loan.isThirdParty).map(loan => loan.borrower))
+  ).sort((a, b) => a.localeCompare(b, 'pt-BR'));
 
   // Filtrar empréstimos com base na data, tipo e funcionário
   const filteredLoans = loans.filter(loan => {
@@ -135,19 +212,29 @@ const Reports = () => {
   .sort((a, b) => a.toolName.localeCompare(b.toolName, 'pt-BR'));
 
   // Função para verificar se um funcionário existe
-  const checkEmployeeExists = (name: string) => {
+  const checkEmployeeExists = (name: string, isThirdParty = false) => {
     if (!name || name === "all") return true;
     
-    return uniqueBorrowers.some(
+    const listToCheck = isThirdParty ? uniqueThirdPartyBorrowers : uniqueEmployeeBorrowers;
+    return listToCheck.some(
       borrower => borrower.toLowerCase().includes(name.toLowerCase())
     );
   };
 
   // Função para filtrar funcionários com base na busca
   const filterEmployees = (searchValue: string) => {
-    if (!searchValue) return uniqueBorrowers;
+    if (!searchValue) return uniqueEmployeeBorrowers;
     
-    return uniqueBorrowers.filter(
+    return uniqueEmployeeBorrowers.filter(
+      name => name.toLowerCase().includes(searchValue.toLowerCase())
+    );
+  };
+
+  // Função para filtrar terceiros com base na busca
+  const filterThirdParties = (searchValue: string) => {
+    if (!searchValue) return uniqueThirdPartyBorrowers;
+    
+    return uniqueThirdPartyBorrowers.filter(
       name => name.toLowerCase().includes(searchValue.toLowerCase())
     );
   };
@@ -155,24 +242,50 @@ const Reports = () => {
   // Função para adicionar terceiro
   const handleAddThirdParty = (data: ThirdPartyFormValues) => {
     try {
-      // Adicionando o terceiro ao contexto (assumimos que existe uma função para isso)
-      if (thirdParties && Array.isArray(thirdParties)) {
-        const newThirdParty: ThirdParty = {
+      if (editingThirdParty) {
+        // Atualizar o terceiro existente
+        updateThirdParty({
           companyName: data.companyName,
           employeeName: data.employeeName,
           role: data.role
-        };
-        
-        toast.success(`Terceiro ${data.employeeName} da empresa ${data.companyName} adicionado com sucesso!`);
-        setThirdPartyDialogOpen(false);
-        thirdPartyForm.reset();
+        });
+        setEditingThirdParty(null);
       } else {
-        toast.error("Não foi possível adicionar terceiros. Funcionalidade não disponível.");
+        // Adicionar novo terceiro
+        addThirdParty({
+          companyName: data.companyName,
+          employeeName: data.employeeName,
+          role: data.role
+        });
       }
+      
+      setThirdPartyDialogOpen(false);
+      thirdPartyForm.reset();
     } catch (error) {
-      console.error("Erro ao adicionar terceiro:", error);
-      toast.error("Erro ao adicionar terceiro. Tente novamente.");
+      console.error("Erro ao adicionar/atualizar terceiro:", error);
+      toast.error("Erro ao adicionar/atualizar terceiro. Tente novamente.");
     }
+  };
+
+  // Função para editar terceiro
+  const handleEditThirdParty = (thirdParty: ThirdParty) => {
+    setEditingThirdParty(thirdParty);
+    setThirdPartyDialogOpen(true);
+  };
+
+  // Função para confirmar exclusão de terceiro
+  const handleDeleteThirdParty = () => {
+    if (thirdPartyToDelete) {
+      deleteThirdParty(thirdPartyToDelete.companyName, thirdPartyToDelete.employeeName);
+      setThirdPartyToDelete(null);
+      setThirdPartyAlertOpen(false);
+    }
+  };
+
+  // Função para abrir o diálogo de exclusão
+  const openDeleteDialog = (thirdParty: ThirdParty) => {
+    setThirdPartyToDelete(thirdParty);
+    setThirdPartyAlertOpen(true);
   };
 
   // Função para gerar PDF de relatórios
@@ -198,7 +311,7 @@ const Reports = () => {
       }
       
       if (employeeFilter !== "all") {
-        doc.text(`Funcionário: ${employeeFilter}`, 14, yPos);
+        doc.text(`Responsável: ${employeeFilter}`, 14, yPos);
         yPos += 5;
       }
       
@@ -244,15 +357,22 @@ const Reports = () => {
   // Função para imprimir com opções personalizadas
   const handlePrintWithOptions = (values: PrintFormValues) => {
     try {
-      // Verificar se o funcionário existe na lista
-      if (values.employeeName && values.employeeName !== "all" && !checkEmployeeExists(values.employeeName)) {
+      // Verificar se o funcionário/terceiro existe na lista
+      if (values.borrowerType === "employee" && values.employeeName && !checkEmployeeExists(values.employeeName)) {
         toast.error("Funcionário não encontrado na lista.");
         setShowEmployeeNotFound(true);
         return;
       }
 
+      if (values.borrowerType === "thirdParty" && values.thirdPartyName && !checkEmployeeExists(values.thirdPartyName, true)) {
+        toast.error("Terceiro não encontrado na lista.");
+        setShowEmployeeNotFound(true);
+        return;
+      }
+
       // Aplicar filtros baseados nos valores do formulário
-      const employeeFilterValue = values.employeeName || "all";
+      const employeeFilterValue = values.borrowerType === "employee" ? values.employeeName || "all" : "all";
+      const thirdPartyFilterValue = values.borrowerType === "thirdParty" ? values.thirdPartyName || "all" : "all";
       const statusFilterValue = values.loanStatus;
       const isPrinterReceipt = values.printerType === "receipt";
       const borrowerTypeValue = values.borrowerType;
@@ -363,15 +483,19 @@ const Reports = () => {
       
       // Filtrar os empréstimos conforme as opções selecionadas
       const printLoans = loans.filter(loan => {
-        // Filtro por funcionário
-        const matchesEmployee = employeeFilterValue === "all" || 
-          loan.borrower.toLowerCase().includes(employeeFilterValue.toLowerCase());
-        
-        if (!matchesEmployee) return false;
-        
-        // Filtro por tipo de responsável (funcionário ou terceiro)
+        // Filtro por tipo de responsável
         if (borrowerTypeValue === "employee" && loan.isThirdParty) return false;
         if (borrowerTypeValue === "thirdParty" && !loan.isThirdParty) return false;
+        
+        // Filtro por funcionário específico
+        if (borrowerTypeValue === "employee" && employeeFilterValue !== "all") {
+          if (loan.borrower.toLowerCase() !== employeeFilterValue.toLowerCase()) return false;
+        }
+        
+        // Filtro por terceiro específico
+        if (borrowerTypeValue === "thirdParty" && thirdPartyFilterValue !== "all") {
+          if (loan.borrower.toLowerCase() !== thirdPartyFilterValue.toLowerCase()) return false;
+        }
         
         // Filtro por status
         if (statusFilterValue === "active") return loan.status === "active";
@@ -404,6 +528,13 @@ const Reports = () => {
         empInfo.classList.add('print-info');
         empInfo.textContent = `Funcionário: ${employeeFilterValue}`;
         header.appendChild(empInfo);
+      }
+      
+      if (thirdPartyFilterValue !== "all") {
+        const thirdPartyInfo = document.createElement('p');
+        thirdPartyInfo.classList.add('print-info');
+        thirdPartyInfo.textContent = `Terceiro: ${thirdPartyFilterValue}`;
+        header.appendChild(thirdPartyInfo);
       }
       
       const statusInfo = document.createElement('p');
@@ -441,14 +572,18 @@ const Reports = () => {
           </tr>
         </thead>
         <tbody>
-          ${printLoans.map(loan => `
+          ${printLoans.length > 0 ? printLoans.map(loan => `
             <tr>
               <td>${loan.toolName}</td>
               <td>${loan.borrower}${loan.isThirdParty ? ' (Terceiro)' : ''}</td>
               <td>${formatDate(loan.borrowDate, false)}</td>
               <td>${loan.status === "active" ? "Em uso" : "Devolvido"}</td>
             </tr>
-          `).join('')}
+          `).join('') : `
+            <tr>
+              <td colspan="4" style="text-align: center; padding: 20px;">Nenhum registro encontrado</td>
+            </tr>
+          `}
         </tbody>
       `;
       
@@ -464,12 +599,73 @@ const Reports = () => {
       
       // Fechar o diálogo após imprimir
       setDialogOpen(false);
+      printForm.reset();
       
       toast.success("Comando de impressão enviado");
     } catch (error) {
       console.error("Erro ao imprimir:", error);
       toast.error("Erro ao imprimir. Verifique o console para mais detalhes.");
     }
+  };
+
+  // Função para renderizar a lista de terceiros
+  const renderThirdPartyList = () => {
+    return (
+      <div className="mt-4 space-y-4">
+        <div className="flex justify-between items-center">
+          <h3 className="text-lg font-medium">Empresas Terceiras</h3>
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => {
+              setEditingThirdParty(null);
+              setThirdPartyDialogOpen(true);
+            }}
+          >
+            Adicionar Novo
+          </Button>
+        </div>
+        
+        {sortedThirdParties.length > 0 ? (
+          <div className="space-y-2">
+            {sortedThirdParties.map((tp, index) => (
+              <div 
+                key={`${tp.companyName}-${tp.employeeName}-${index}`}
+                className="p-3 border rounded-md flex justify-between items-center"
+              >
+                <div>
+                  <div className="font-medium">{tp.companyName}</div>
+                  <div className="text-sm text-muted-foreground">
+                    {tp.employeeName} - {tp.role}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => handleEditThirdParty(tp)}
+                  >
+                    <Pencil size={16} />
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => openDeleteDialog(tp)}
+                    className="text-red-500 hover:text-red-700"
+                  >
+                    <Trash2 size={16} />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="p-8 text-center text-muted-foreground border rounded-md">
+            Nenhuma empresa terceira cadastrada
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -514,13 +710,16 @@ const Reports = () => {
           </Button>
           <Button
             variant="outline"
-            onClick={() => setThirdPartyDialogOpen(true)}
+            onClick={() => setThirdPartyList(!thirdPartyList)}
           >
             <Building className="h-4 w-4 mr-2" />
-            Adicionar Terceiros
+            {thirdPartyList ? "Ocultar Terceiros" : "Gerenciar Terceiros"}
           </Button>
         </div>
       </div>
+
+      {/* Lista de terceiros */}
+      {thirdPartyList && renderThirdPartyList()}
 
       <Card className="mb-8 print:hidden">
         <CardHeader>
@@ -649,105 +848,6 @@ const Reports = () => {
               <form onSubmit={printForm.handleSubmit(handlePrintWithOptions)} className="space-y-4">
                 <FormField
                   control={printForm.control}
-                  name="employeeName"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                      <FormLabel>Nome do Funcionário</FormLabel>
-                      <div className="relative">
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <FormControl>
-                              <Button
-                                variant="outline"
-                                role="combobox"
-                                className={cn(
-                                  "w-full justify-between",
-                                  !field.value && "text-muted-foreground"
-                                )}
-                              >
-                                {field.value
-                                  ? field.value === "all" 
-                                    ? "Todos os funcionários" 
-                                    : field.value
-                                  : "Selecione um funcionário"}
-                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                              </Button>
-                            </FormControl>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-full p-0">
-                            {/* Comando com filtragem manual de funcionários */}
-                            <div className="w-full border-none p-0">
-                              <div className="flex items-center border-b px-3">
-                                <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-                                <Input 
-                                  placeholder="Buscar funcionário..." 
-                                  className="flex h-11 w-full rounded-md bg-transparent py-3 text-sm outline-none border-none focus-visible:ring-0 focus-visible:ring-offset-0"
-                                  value={employeeSearchValue}
-                                  onChange={(e) => {
-                                    setEmployeeSearchValue(e.target.value);
-                                    setShowEmployeeNotFound(false);
-                                  }}
-                                />
-                              </div>
-                              <div className="max-h-[300px] overflow-y-auto">
-                                {uniqueBorrowers.length > 0 ? (
-                                  <div className="overflow-hidden p-1">
-                                    <div className="flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none"
-                                        onClick={() => {
-                                          printForm.setValue("employeeName", "all");
-                                          setShowEmployeeNotFound(false);
-                                          setEmployeeSearchValue("");
-                                        }}
-                                    >
-                                      <Check
-                                        className={cn(
-                                          "mr-2 h-4 w-4",
-                                          field.value === "all" ? "opacity-100" : "opacity-0"
-                                        )}
-                                      />
-                                      Todos os funcionários
-                                    </div>
-                                    {filterEmployees(employeeSearchValue).map((name) => (
-                                      <div key={name}
-                                        className="flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
-                                        onClick={() => {
-                                          printForm.setValue("employeeName", name);
-                                          setShowEmployeeNotFound(false);
-                                          setEmployeeSearchValue("");
-                                        }}
-                                      >
-                                        <Check
-                                          className={cn(
-                                            "mr-2 h-4 w-4",
-                                            name === field.value ? "opacity-100" : "opacity-0"
-                                          )}
-                                        />
-                                        {name}
-                                      </div>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <div className="py-6 text-center text-sm">
-                                    Nenhum funcionário encontrado.
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-                      {showEmployeeNotFound && (
-                        <p className="text-sm font-medium text-destructive">
-                          Funcionário não encontrado na lista.
-                        </p>
-                      )}
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <FormField
-                  control={printForm.control}
                   name="borrowerType"
                   render={({ field }) => (
                     <FormItem className="space-y-3">
@@ -756,6 +856,7 @@ const Reports = () => {
                         <RadioGroup
                           onValueChange={field.onChange}
                           defaultValue={field.value}
+                          value={field.value}
                           className="flex flex-col space-y-1"
                         >
                           <div className="flex items-center space-x-2">
@@ -772,9 +873,186 @@ const Reports = () => {
                           </div>
                         </RadioGroup>
                       </FormControl>
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
+                
+                {/* Campo condicional para seleção de funcionário */}
+                {borrowerType === "employee" && (
+                  <FormField
+                    control={printForm.control}
+                    name="employeeName"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>Nome do Funcionário</FormLabel>
+                        <div className="relative">
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <FormControl>
+                                <Button
+                                  variant="outline"
+                                  role="combobox"
+                                  className={cn(
+                                    "w-full justify-between",
+                                    !field.value && "text-muted-foreground"
+                                  )}
+                                >
+                                  {field.value
+                                    ? field.value === "all" 
+                                      ? "Todos os funcionários" 
+                                      : field.value
+                                    : "Selecione um funcionário"}
+                                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                </Button>
+                              </FormControl>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-full p-0">
+                              <Command>
+                                <CommandInput 
+                                  placeholder="Buscar funcionário..." 
+                                  onChange={(e) => setEmployeeSearchValue(e.target.value)}
+                                />
+                                <CommandEmpty>Nenhum funcionário encontrado.</CommandEmpty>
+                                <CommandGroup>
+                                  <CommandItem
+                                    value="all"
+                                    onSelect={() => {
+                                      printForm.setValue("employeeName", "all");
+                                      setEmployeeSearchValue("");
+                                      setShowEmployeeNotFound(false);
+                                    }}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        field.value === "all" ? "opacity-100" : "opacity-0"
+                                      )}
+                                    />
+                                    Todos os funcionários
+                                  </CommandItem>
+                                  {filterEmployees(employeeSearchValue).map((name) => (
+                                    <CommandItem
+                                      key={name}
+                                      value={name}
+                                      onSelect={() => {
+                                        printForm.setValue("employeeName", name);
+                                        setEmployeeSearchValue("");
+                                        setShowEmployeeNotFound(false);
+                                      }}
+                                    >
+                                      <Check
+                                        className={cn(
+                                          "mr-2 h-4 w-4",
+                                          name === field.value ? "opacity-100" : "opacity-0"
+                                        )}
+                                      />
+                                      {name}
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </Command>
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                        {showEmployeeNotFound && borrowerType === "employee" && (
+                          <p className="text-sm font-medium text-destructive">
+                            Funcionário não encontrado na lista.
+                          </p>
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+                
+                {/* Campo condicional para seleção de terceiros */}
+                {borrowerType === "thirdParty" && (
+                  <FormField
+                    control={printForm.control}
+                    name="thirdPartyName"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>Nome do Terceiro</FormLabel>
+                        <div className="relative">
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <FormControl>
+                                <Button
+                                  variant="outline"
+                                  role="combobox"
+                                  className={cn(
+                                    "w-full justify-between",
+                                    !field.value && "text-muted-foreground"
+                                  )}
+                                >
+                                  {field.value
+                                    ? field.value === "all" 
+                                      ? "Todos os terceiros" 
+                                      : field.value
+                                    : "Selecione um terceiro"}
+                                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                </Button>
+                              </FormControl>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-full p-0">
+                              <Command>
+                                <CommandInput 
+                                  placeholder="Buscar terceiro..." 
+                                  onChange={(e) => setEmployeeSearchValue(e.target.value)}
+                                />
+                                <CommandEmpty>Nenhum terceiro encontrado.</CommandEmpty>
+                                <CommandGroup>
+                                  <CommandItem
+                                    value="all"
+                                    onSelect={() => {
+                                      printForm.setValue("thirdPartyName", "all");
+                                      setEmployeeSearchValue("");
+                                      setShowEmployeeNotFound(false);
+                                    }}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        field.value === "all" ? "opacity-100" : "opacity-0"
+                                      )}
+                                    />
+                                    Todos os terceiros
+                                  </CommandItem>
+                                  {filterThirdParties(employeeSearchValue).map((name) => (
+                                    <CommandItem
+                                      key={name}
+                                      value={name}
+                                      onSelect={() => {
+                                        printForm.setValue("thirdPartyName", name);
+                                        setEmployeeSearchValue("");
+                                        setShowEmployeeNotFound(false);
+                                      }}
+                                    >
+                                      <Check
+                                        className={cn(
+                                          "mr-2 h-4 w-4",
+                                          name === field.value ? "opacity-100" : "opacity-0"
+                                        )}
+                                      />
+                                      {name}
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </Command>
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                        {showEmployeeNotFound && borrowerType === "thirdParty" && (
+                          <p className="text-sm font-medium text-destructive">
+                            Terceiro não encontrado na lista.
+                          </p>
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
                 
                 <FormField
                   control={printForm.control}
@@ -786,6 +1064,7 @@ const Reports = () => {
                         <RadioGroup
                           onValueChange={field.onChange}
                           defaultValue={field.value}
+                          value={field.value}
                           className="flex flex-col space-y-1"
                         >
                           <div className="flex items-center space-x-2">
@@ -802,6 +1081,7 @@ const Reports = () => {
                           </div>
                         </RadioGroup>
                       </FormControl>
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
@@ -816,6 +1096,7 @@ const Reports = () => {
                         <RadioGroup
                           onValueChange={field.onChange}
                           defaultValue={field.value}
+                          value={field.value}
                           className="flex flex-col space-y-1"
                         >
                           <div className="flex items-center space-x-2">
@@ -828,13 +1109,14 @@ const Reports = () => {
                           </div>
                         </RadioGroup>
                       </FormControl>
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
                 
                 <DialogFooter>
                   <DialogClose asChild>
-                    <Button variant="outline">Cancelar</Button>
+                    <Button variant="outline" type="button">Cancelar</Button>
                   </DialogClose>
                   <Button type="submit">Imprimir</Button>
                 </DialogFooter>
@@ -927,12 +1209,19 @@ const Reports = () => {
       </Card>
 
       {/* Dialog para adicionar terceiros */}
-      <Dialog open={thirdPartyDialogOpen} onOpenChange={setThirdPartyDialogOpen}>
+      <Dialog open={thirdPartyDialogOpen} onOpenChange={(open) => {
+        setThirdPartyDialogOpen(open);
+        if (!open) setEditingThirdParty(null);
+      }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Adicionar Empresa Terceira</DialogTitle>
+            <DialogTitle>
+              {editingThirdParty ? "Editar Empresa Terceira" : "Adicionar Empresa Terceira"}
+            </DialogTitle>
             <DialogDescription>
-              Cadastre uma empresa terceira para empréstimos de ferramentas
+              {editingThirdParty 
+                ? "Edite os dados da empresa terceira" 
+                : "Cadastre uma empresa terceira para empréstimos de ferramentas"}
             </DialogDescription>
           </DialogHeader>
           
@@ -981,15 +1270,43 @@ const Reports = () => {
               />
               
               <DialogFooter>
-                <Button variant="outline" type="button" onClick={() => setThirdPartyDialogOpen(false)}>
+                <Button 
+                  variant="outline" 
+                  type="button" 
+                  onClick={() => {
+                    setThirdPartyDialogOpen(false);
+                    setEditingThirdParty(null);
+                  }}
+                >
                   Cancelar
                 </Button>
-                <Button type="submit">Adicionar</Button>
+                <Button type="submit">
+                  {editingThirdParty ? "Salvar" : "Adicionar"}
+                </Button>
               </DialogFooter>
             </form>
           </Form>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog de confirmação para excluir terceiro */}
+      <AlertDialog open={thirdPartyAlertOpen} onOpenChange={setThirdPartyAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir {thirdPartyToDelete?.employeeName} da empresa {thirdPartyToDelete?.companyName}?
+              Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteThirdParty} className="bg-red-600 hover:bg-red-700">
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
     </div>
   );
