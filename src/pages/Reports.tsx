@@ -3,7 +3,7 @@ import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, CalendarDays, FileText, Download, Search, User, Printer, Filter } from "lucide-react";
+import { ArrowLeft, CalendarDays, FileText, Download, Search, User, Printer, Filter, Building, UserPlus } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { Tabs, TabsList, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { DateRange } from "react-day-picker";
@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { jsPDF } from "jspdf";
-import autoTable from 'jspdf-autotable';
+import 'jspdf-autotable';
 import { format } from "date-fns";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -44,29 +44,30 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-// Extend jsPDF type to include autoTable method
-declare module 'jspdf' {
-  interface jsPDF {
-    autoTable: (options: any) => any;
-    lastAutoTable: {
-      finalY: number;
-    };
-  }
-}
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger, SheetFooter } from "@/components/ui/sheet";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 // Schema for print dialog form
 const printFormSchema = z.object({
-  employeeName: z.string().optional(),
+  employeeName: z.string().min(1, "Selecione um funcionário").optional(),
   loanStatus: z.enum(["all", "active", "returned"]),
-  printerType: z.enum(["receipt", "normal"])
+  printerType: z.enum(["receipt", "normal"]),
+  borrowerType: z.enum(["all", "employee", "thirdParty"])
+});
+
+// Schema for third-party company form
+const thirdPartySchema = z.object({
+  companyName: z.string().min(1, "Nome da empresa é obrigatório"),
+  employeeName: z.string().min(1, "Nome do funcionário é obrigatório"),
+  role: z.string().min(1, "Função é obrigatória")
 });
 
 type PrintFormValues = z.infer<typeof printFormSchema>;
+type ThirdPartyFormValues = z.infer<typeof thirdPartySchema>;
 
 const Reports = () => {
   const navigate = useNavigate();
-  const { loans, employees } = useTools();
+  const { loans, employees, addThirdParty } = useTools();
   const [date, setDate] = useState<DateRange | undefined>({
     from: new Date(new Date().setMonth(new Date().getMonth() - 1)),
     to: new Date(),
@@ -74,8 +75,11 @@ const Reports = () => {
   const [reportType, setReportType] = useState<string>("all");
   const [employeeFilter, setEmployeeFilter] = useState<string>("all");
   const [openEmployeeSelect, setOpenEmployeeSelect] = useState(false);
-  const printRef = useRef<HTMLDivElement>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [thirdPartyDialogOpen, setThirdPartyDialogOpen] = useState(false);
+  const [employeeSearchValue, setEmployeeSearchValue] = useState("");
+  const [showEmployeeNotFound, setShowEmployeeNotFound] = useState(false);
+  const printRef = useRef<HTMLDivElement>(null);
   
   // Form for print dialog
   const printForm = useForm<PrintFormValues>({
@@ -83,7 +87,18 @@ const Reports = () => {
     defaultValues: {
       employeeName: "",
       loanStatus: "all",
-      printerType: "receipt"
+      printerType: "receipt",
+      borrowerType: "all"
+    }
+  });
+
+  // Form for third-party company
+  const thirdPartyForm = useForm<ThirdPartyFormValues>({
+    resolver: zodResolver(thirdPartySchema),
+    defaultValues: {
+      companyName: "",
+      employeeName: "",
+      role: ""
     }
   });
 
@@ -122,11 +137,51 @@ const Reports = () => {
   })
   .sort((a, b) => a.toolName.localeCompare(b.toolName, 'pt-BR'));
 
+  // Função para verificar se um funcionário existe
+  const checkEmployeeExists = (name: string) => {
+    if (!name || name === "all") return true;
+    
+    return uniqueBorrowers.some(
+      borrower => borrower.toLowerCase().includes(name.toLowerCase())
+    );
+  };
+
+  // Função para filtrar funcionários com base na busca
+  const filterEmployees = (searchValue: string) => {
+    if (!searchValue) return uniqueBorrowers;
+    
+    return uniqueBorrowers.filter(
+      name => name.toLowerCase().includes(searchValue.toLowerCase())
+    );
+  };
+
+  // Função para adicionar terceiro
+  const handleAddThirdParty = (data: ThirdPartyFormValues) => {
+    try {
+      // Aqui você adicionaria à sua lista de terceiros
+      // Como exemplo, vamos apenas mostrar um toast de sucesso
+      addThirdParty({
+        companyName: data.companyName,
+        employeeName: data.employeeName,
+        role: data.role
+      });
+      
+      toast.success(`Terceiro ${data.employeeName} da empresa ${data.companyName} adicionado com sucesso!`);
+      setThirdPartyDialogOpen(false);
+      thirdPartyForm.reset();
+    } catch (error) {
+      console.error("Erro ao adicionar terceiro:", error);
+      toast.error("Erro ao adicionar terceiro. Tente novamente.");
+    }
+  };
+
   // Função para gerar PDF de relatórios
   const generatePDF = () => {
     try {
       // Create a new PDF document
       const doc = new jsPDF();
+      
+      // Import autotable is automatically applied to the doc object
       
       // Add title
       doc.setFontSize(16);
@@ -167,8 +222,8 @@ const Reports = () => {
           : "Devolvido"
       ]);
       
-      // Generate the table using the autoTable function from jspdf-autotable
-      autoTable(doc, {
+      // Generate the table using the autoTable function
+      (doc as any).autoTable({
         startY: yPos + 5,
         head: [["Ferramenta", "Responsável", "Função", "Saída", "Devolução Prevista", "Devolução Real", "Status"]],
         body: tableData,
@@ -191,10 +246,17 @@ const Reports = () => {
   // Função para imprimir com opções personalizadas
   const handlePrintWithOptions = (values: PrintFormValues) => {
     try {
+      // Verificar se o funcionário existe na lista
+      if (values.employeeName && values.employeeName !== "all" && !checkEmployeeExists(values.employeeName)) {
+        toast.error("Funcionário não encontrado na lista.");
+        return;
+      }
+
       // Aplicar filtros baseados nos valores do formulário
       const employeeFilterValue = values.employeeName || "all";
       const statusFilterValue = values.loanStatus;
       const isPrinterReceipt = values.printerType === "receipt";
+      const borrowerTypeValue = values.borrowerType;
       
       // Configurar estilo de impressão
       const originalTitle = document.title;
@@ -302,12 +364,17 @@ const Reports = () => {
       
       // Filtrar os empréstimos conforme as opções selecionadas
       const printLoans = loans.filter(loan => {
+        // Filtro por funcionário
         const matchesEmployee = employeeFilterValue === "all" || 
           loan.borrower.toLowerCase().includes(employeeFilterValue.toLowerCase());
         
         if (!matchesEmployee) return false;
         
-        // Aplicar filtro de status
+        // Filtro por tipo de responsável (funcionário ou terceiro)
+        if (borrowerTypeValue === "employee" && loan.isThirdParty) return false;
+        if (borrowerTypeValue === "thirdParty" && !loan.isThirdParty) return false;
+        
+        // Filtro por status
         if (statusFilterValue === "active") return loan.status === "active";
         if (statusFilterValue === "returned") return loan.status === "returned";
         
@@ -348,6 +415,14 @@ const Reports = () => {
       }`;
       header.appendChild(statusInfo);
       
+      const borrowerTypeInfo = document.createElement('p');
+      borrowerTypeInfo.classList.add('print-info');
+      borrowerTypeInfo.textContent = `Tipo: ${
+        borrowerTypeValue === "employee" ? "Funcionários" : 
+        borrowerTypeValue === "thirdParty" ? "Terceiros" : "Todos"
+      }`;
+      header.appendChild(borrowerTypeInfo);
+      
       const printerInfo = document.createElement('p');
       printerInfo.classList.add('print-info');
       printerInfo.textContent = `Impressora: ${isPrinterReceipt ? "Cupom" : "Normal"}`;
@@ -370,7 +445,7 @@ const Reports = () => {
           ${printLoans.map(loan => `
             <tr>
               <td>${loan.toolName}</td>
-              <td>${loan.borrower}</td>
+              <td>${loan.borrower}${loan.isThirdParty ? ' (Terceiro)' : ''}</td>
               <td>${formatDate(loan.borrowDate, false)}</td>
               <td>${loan.status === "active" ? "Em uso" : "Devolvido"}</td>
             </tr>
@@ -438,6 +513,13 @@ const Reports = () => {
             <User className="h-4 w-4 mr-2" />
             Funcionários
           </Button>
+          <Button
+            variant="outline"
+            onClick={() => setThirdPartyDialogOpen(true)}
+          >
+            <Building className="h-4 w-4 mr-2" />
+            Adicionar Terceiros
+          </Button>
         </div>
       </div>
 
@@ -493,13 +575,18 @@ const Reports = () => {
               </PopoverTrigger>
               <PopoverContent className="w-full p-0">
                 <Command>
-                  <CommandInput placeholder="Buscar funcionário..." />
+                  <CommandInput 
+                    placeholder="Buscar funcionário..." 
+                    value={employeeSearchValue}
+                    onValueChange={setEmployeeSearchValue}
+                  />
                   <CommandEmpty>Nenhum funcionário encontrado.</CommandEmpty>
                   <CommandGroup>
                     <CommandItem
                       value="all"
                       onSelect={() => {
                         setEmployeeFilter("all");
+                        setEmployeeSearchValue("");
                         setOpenEmployeeSelect(false);
                       }}
                     >
@@ -511,12 +598,13 @@ const Reports = () => {
                       />
                       Todos os funcionários
                     </CommandItem>
-                    {uniqueBorrowers.map((name) => (
+                    {filterEmployees(employeeSearchValue).map((name) => (
                       <CommandItem
                         key={name}
                         value={name}
                         onSelect={() => {
                           setEmployeeFilter(name);
+                          setEmployeeSearchValue("");
                           setOpenEmployeeSelect(false);
                         }}
                       >
@@ -566,54 +654,113 @@ const Reports = () => {
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
                       <FormLabel>Nome do Funcionário</FormLabel>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <FormControl>
-                            <Button
-                              variant="outline"
-                              role="combobox"
-                              className={cn(
-                                "w-full justify-between",
-                                !field.value && "text-muted-foreground"
-                              )}
-                            >
-                              {field.value
-                                ? uniqueBorrowers.find(
-                                    (name) => name === field.value
-                                  )
-                                : "Selecione um funcionário"}
-                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                            </Button>
-                          </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-full p-0">
-                          <Command>
-                            <CommandInput placeholder="Buscar funcionário..." />
-                            <CommandEmpty>Nenhum funcionário encontrado.</CommandEmpty>
-                            <CommandGroup>
-                              {uniqueBorrowers.map((name) => (
+                      <div className="relative">
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant="outline"
+                                role="combobox"
+                                className={cn(
+                                  "w-full justify-between",
+                                  !field.value && "text-muted-foreground"
+                                )}
+                              >
+                                {field.value
+                                  ? field.value === "all" 
+                                    ? "Todos os funcionários" 
+                                    : field.value
+                                  : "Selecione um funcionário"}
+                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-full p-0">
+                            <Command>
+                              <CommandInput 
+                                placeholder="Buscar funcionário..." 
+                                onValueChange={(value) => {
+                                  setShowEmployeeNotFound(false);
+                                }}
+                              />
+                              <CommandEmpty>
+                                Nenhum funcionário encontrado.
+                              </CommandEmpty>
+                              <CommandGroup>
                                 <CommandItem
-                                  value={name}
-                                  key={name}
+                                  value="all"
                                   onSelect={() => {
-                                    printForm.setValue("employeeName", name);
+                                    printForm.setValue("employeeName", "all");
+                                    setShowEmployeeNotFound(false);
                                   }}
                                 >
                                   <Check
                                     className={cn(
                                       "mr-2 h-4 w-4",
-                                      name === field.value
-                                        ? "opacity-100"
-                                        : "opacity-0"
+                                      field.value === "all" ? "opacity-100" : "opacity-0"
                                     )}
                                   />
-                                  {name}
+                                  Todos os funcionários
                                 </CommandItem>
-                              ))}
-                            </CommandGroup>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
+                                {uniqueBorrowers.map((name) => (
+                                  <CommandItem
+                                    value={name}
+                                    key={name}
+                                    onSelect={() => {
+                                      printForm.setValue("employeeName", name);
+                                      setShowEmployeeNotFound(false);
+                                    }}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        name === field.value ? "opacity-100" : "opacity-0"
+                                      )}
+                                    />
+                                    {name}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                      {showEmployeeNotFound && (
+                        <p className="text-sm font-medium text-destructive">
+                          Funcionário não encontrado na lista.
+                        </p>
+                      )}
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={printForm.control}
+                  name="borrowerType"
+                  render={({ field }) => (
+                    <FormItem className="space-y-3">
+                      <FormLabel>Tipo de Responsável</FormLabel>
+                      <FormControl>
+                        <RadioGroup
+                          onValueChange={field.onChange}
+                          defaultValue={field.value}
+                          className="flex flex-col space-y-1"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="all" id="borrower-all" />
+                            <Label htmlFor="borrower-all">Todos</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="employee" id="borrower-employee" />
+                            <Label htmlFor="borrower-employee">Funcionários</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="thirdParty" id="borrower-third" />
+                            <Label htmlFor="borrower-third">Terceiros</Label>
+                          </div>
+                        </RadioGroup>
+                      </FormControl>
                     </FormItem>
                   )}
                 />
@@ -767,6 +914,72 @@ const Reports = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Dialog para adicionar terceiros */}
+      <Dialog open={thirdPartyDialogOpen} onOpenChange={setThirdPartyDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Adicionar Empresa Terceira</DialogTitle>
+            <DialogDescription>
+              Cadastre uma empresa terceira para empréstimos de ferramentas
+            </DialogDescription>
+          </DialogHeader>
+          
+          <Form {...thirdPartyForm}>
+            <form onSubmit={thirdPartyForm.handleSubmit(handleAddThirdParty)} className="space-y-4">
+              <FormField
+                control={thirdPartyForm.control}
+                name="companyName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nome da Empresa</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Digite o nome da empresa" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={thirdPartyForm.control}
+                name="employeeName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nome do Funcionário</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Digite o nome do funcionário" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={thirdPartyForm.control}
+                name="role"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Função na Empresa</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Digite a função do funcionário" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <DialogFooter>
+                <Button variant="outline" type="button" onClick={() => setThirdPartyDialogOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button type="submit">Adicionar</Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 };

@@ -19,6 +19,12 @@ export interface Employee {
   role: string;
 }
 
+export interface ThirdParty {
+  companyName: string;
+  employeeName: string;
+  role: string;
+}
+
 export interface Loan {
   id: string;
   toolId: string;
