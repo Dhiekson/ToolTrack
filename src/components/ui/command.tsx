@@ -52,7 +52,7 @@ const CommandInput = React.forwardRef<
     }
   }, [props.value])
 
-  // Handle the input change manually
+  // Handle the input change
   const handleInputChange = React.useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const newValue = e.target.value
