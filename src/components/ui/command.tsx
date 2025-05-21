@@ -43,12 +43,12 @@ const CommandInput = React.forwardRef<
   }
 >(({ className, onValueChange, ...props }, ref) => {
   // Create a value state to handle the input value
-  const [value, setValue] = React.useState(props.value || "")
+  const [value, setValue] = React.useState(props.value?.toString() || "")
   
   // Update the local value state when props.value changes
   React.useEffect(() => {
     if (props.value !== undefined) {
-      setValue(props.value)
+      setValue(props.value?.toString() || "")
     }
   }, [props.value])
 
@@ -76,7 +76,7 @@ const CommandInput = React.forwardRef<
           className
         )}
         value={value}
-        onInput={handleInputChange}
+        onChange={handleInputChange}
         {...props}
       />
     </div>
