@@ -77,6 +77,7 @@ const CommandInput = React.forwardRef<
         )}
         value={value}
         onInput={handleInputChange}
+        // Certifique-se de não passar o onValueChange para o CommandPrimitive.Input
         {...props}
       />
     </div>

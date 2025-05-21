@@ -494,7 +494,10 @@ const Reports = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium mb-2">Busca por Funcionário</label>
-              <Popover open={openEmployeeSelect} onOpenChange={setOpenEmployeeSelect}>
+              <Popover 
+                open={openEmployeeSelect} 
+                onOpenChange={setOpenEmployeeSelect}
+              >
                 <PopoverTrigger asChild>
                   <Button
                     type="button" 
@@ -564,7 +567,10 @@ const Reports = () => {
             
             <div>
               <label className="block text-sm font-medium mb-2">Busca por Empresa</label>
-              <Popover open={openCompanySelect} onOpenChange={setOpenCompanySelect}>
+              <Popover 
+                open={openCompanySelect} 
+                onOpenChange={setOpenCompanySelect}
+              >
                 <PopoverTrigger asChild>
                   <Button
                     type="button"
@@ -694,6 +700,7 @@ const Reports = () => {
                             <PopoverTrigger asChild>
                               <FormControl>
                                 <Button
+                                  type="button"
                                   variant="outline"
                                   role="combobox"
                                   className={cn(
