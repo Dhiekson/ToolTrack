@@ -42,23 +42,19 @@ const CommandInput = React.forwardRef<
     onValueChange?: (value: string) => void
   }
 >(({ className, onValueChange, ...props }, ref) => {
-  // Create a value state to handle the input value
   const [value, setValue] = React.useState(props.value?.toString() || "")
   
-  // Update the local value state when props.value changes
   React.useEffect(() => {
     if (props.value !== undefined) {
-      setValue(props.value?.toString() || "")
+      setValue(props.value.toString())
     }
   }, [props.value])
 
-  // Handle input change using onInput instead of onChange
   const handleInputChange = React.useCallback(
     (e: React.FormEvent<HTMLInputElement>) => {
       const newValue = e.currentTarget.value
       setValue(newValue)
       
-      // Call the onValueChange callback if provided
       if (onValueChange) {
         onValueChange(newValue)
       }
@@ -77,7 +73,6 @@ const CommandInput = React.forwardRef<
         )}
         value={value}
         onInput={handleInputChange}
-        // Certifique-se de não passar o onValueChange para o CommandPrimitive.Input
         {...props}
       />
     </div>
