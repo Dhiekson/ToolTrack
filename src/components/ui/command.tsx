@@ -42,16 +42,14 @@ const CommandInput = React.forwardRef<
     onValueChange?: (value: string) => void
   }
 >(({ className, onValueChange, ...props }, ref) => {
-  // Handle the onValueChange callback separately
-  const handleChange = React.useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleValueChange = React.useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
       if (onValueChange) {
-        onValueChange(e.target.value);
+        onValueChange(event.target.value)
       }
-      // We don't need to handle props.onChange since it doesn't exist in the CommandPrimitive.Input props
     },
     [onValueChange]
-  );
+  )
 
   return (
     <div className="flex items-center border-b px-3" cmdk-input-wrapper="">
@@ -62,12 +60,12 @@ const CommandInput = React.forwardRef<
           "flex h-11 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
           className
         )}
-        onChange={handleChange}
+        onValueChange={onValueChange}
         {...props}
       />
     </div>
-  );
-});
+  )
+})
 
 CommandInput.displayName = CommandPrimitive.Input.displayName
 
