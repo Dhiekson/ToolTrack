@@ -1,11 +1,17 @@
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatDate } from "@/lib/utils";
+import { format } from "date-fns";
 import { LoanWithToolData } from "@/types/types";
 
 interface ReportTableProps {
   loans: LoanWithToolData[];
 }
+
+const formatDate = (date: Date | string | null, includeTime: boolean = false): string => {
+  if (!date) return "-";
+  const dateObj = typeof date === "string" ? new Date(date) : date;
+  return format(dateObj, includeTime ? "dd/MM/yyyy HH:mm" : "dd/MM/yyyy");
+};
 
 export function ReportTable({ loans }: ReportTableProps) {
   return (
