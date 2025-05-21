@@ -497,10 +497,15 @@ const Reports = () => {
               <Popover open={openEmployeeSelect} onOpenChange={setOpenEmployeeSelect}>
                 <PopoverTrigger asChild>
                   <Button
+                    type="button" 
                     variant="outline"
                     role="combobox"
                     aria-expanded={openEmployeeSelect}
                     className="w-full justify-between"
+                    onClick={(e) => {
+                      e.preventDefault(); // Prevent form submission
+                      setOpenEmployeeSelect(true);
+                    }}
                   >
                     {employeeFilter === "all" ? "Todos os funcionários" : employeeFilter}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -518,7 +523,7 @@ const Reports = () => {
                       <CommandItem
                         key="all"
                         value="all"
-                        onSelect={() => {
+                        onSelect={(value) => {
                           setEmployeeFilter("all");
                           setEmployeeSearchValue("");
                           setOpenEmployeeSelect(false);
@@ -536,7 +541,7 @@ const Reports = () => {
                         <CommandItem
                           key={name}
                           value={name}
-                          onSelect={() => {
+                          onSelect={(value) => {
                             setEmployeeFilter(name);
                             setEmployeeSearchValue("");
                             setOpenEmployeeSelect(false);
@@ -562,10 +567,15 @@ const Reports = () => {
               <Popover open={openCompanySelect} onOpenChange={setOpenCompanySelect}>
                 <PopoverTrigger asChild>
                   <Button
+                    type="button"
                     variant="outline"
                     role="combobox"
                     aria-expanded={openCompanySelect}
                     className="w-full justify-between"
+                    onClick={(e) => {
+                      e.preventDefault(); // Prevent form submission
+                      setOpenCompanySelect(true);
+                    }}
                   >
                     {companyFilter === "all" ? "Todas as empresas" : companyFilter}
                     <Building className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -583,7 +593,7 @@ const Reports = () => {
                       <CommandItem
                         key="all-companies"
                         value="all"
-                        onSelect={() => {
+                        onSelect={(value) => {
                           setCompanyFilter("all");
                           setCompanySearchValue("");
                           setOpenCompanySelect(false);
@@ -601,7 +611,7 @@ const Reports = () => {
                         <CommandItem
                           key={company}
                           value={company}
-                          onSelect={() => {
+                          onSelect={(value) => {
                             setCompanyFilter(company);
                             setCompanySearchValue("");
                             setOpenCompanySelect(false);

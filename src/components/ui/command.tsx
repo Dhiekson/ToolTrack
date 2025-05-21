@@ -52,10 +52,10 @@ const CommandInput = React.forwardRef<
     }
   }, [props.value])
 
-  // Handle the input change
+  // Handle input change using onInput instead of onChange
   const handleInputChange = React.useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const newValue = e.target.value
+    (e: React.FormEvent<HTMLInputElement>) => {
+      const newValue = e.currentTarget.value
       setValue(newValue)
       
       // Call the onValueChange callback if provided
@@ -76,7 +76,7 @@ const CommandInput = React.forwardRef<
           className
         )}
         value={value}
-        onChange={handleInputChange}
+        onInput={handleInputChange}
         {...props}
       />
     </div>
